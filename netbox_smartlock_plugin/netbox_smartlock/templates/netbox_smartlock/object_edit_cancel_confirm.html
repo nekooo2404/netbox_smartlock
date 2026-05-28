@@ -1,0 +1,101 @@
+{% extends 'generic/object_edit.html' %}
+
+{% block buttons %}
+  <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#smartlock-cancel-confirm-modal" data-smartlock-cancel-confirm>
+    Cancel
+  </button>
+  {% if object.pk %}
+    <button type="submit" name="_update" class="btn btn-primary">
+      Save
+    </button>
+  {% else %}
+    <div class="btn-group" role="group" aria-label="Actions">
+      <button type="submit" name="_create" class="btn btn-primary">
+        Create
+      </button>
+      <button type="submit" name="_addanother" class="btn btn-outline-primary">
+        Create & Add Another
+      </button>
+    </div>
+  {% endif %}
+{% endblock buttons %}
+
+{% block modals %}
+  {{ block.super }}
+  <div class="modal fade" id="smartlock-cancel-confirm-modal" tabindex="-1" aria-labelledby="smartlock-cancel-confirm-modal-label" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="smartlock-cancel-confirm-modal-label">Cancel changes?</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          Unsaved changes on this form will be discarded.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Continue Editing</button>
+          <a href="{{ return_url }}" class="btn btn-danger">Discard Changes</a>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock modals %}
+
+{% block javascript %}
+  {{ block.super }}
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var requestField = document.getElementById('id_request');
+      var locationField = document.getElementById('id_location');
+      if (!requestField || !locationField || !locationField.dataset.smartlockLocationScope) {
+        return;
+      }
+
+      var clearLocation = function () {
+        if (locationField.tomselect) {
+          locationField.tomselect.clear();
+        }
+      };
+
+      var applySiteScope = function (siteId) {
+        var staticParams = siteId ? [{ queryParam: 'site_id', queryValue: [String(siteId)] }] : [];
+        locationField.setAttribute('data-static-params', JSON.stringify(staticParams));
+
+        if (locationField.tomselect) {
+          locationField.tomselect.staticParams = new Map();
+          locationField.tomselect.queryParams = new Map();
+          staticParams.forEach(function (item) {
+            locationField.tomselect.staticParams.set(item.queryParam, item.queryValue);
+            locationField.tomselect.queryParams.set(item.queryParam, item.queryValue);
+          });
+          locationField.tomselect.clear();
+          locationField.tomselect.clearOptions();
+        } else {
+          clearLocation();
+        }
+      };
+
+      requestField.addEventListener('change', function () {
+        var requestId = requestField.value;
+        clearLocation();
+        if (!requestId) {
+          applySiteScope(null);
+          return;
+        }
+
+        fetch('/api/plugins/smartlock/access-requests/' + requestId + '/?brief=true', {
+          headers: { Accept: 'application/json' }
+        })
+          .then(function (response) {
+            return response.ok ? response.json() : null;
+          })
+          .then(function (data) {
+            applySiteScope(data && data.site ? data.site.id : null);
+          })
+          .catch(function () {
+            applySiteScope(null);
+          });
+      });
+    });
+  </script>
+{% endblock javascript %}

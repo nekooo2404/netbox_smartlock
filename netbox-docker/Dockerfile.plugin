@@ -1,0 +1,28 @@
+# Dockerfile.plugin — Extend NetBox official image và cài plugin
+# Build context = thư mục cha netbox_smartlock/
+# Dùng cho môi trường development
+
+ARG FROM=docker.io/netboxcommunity/netbox:v4.6-5.0.1
+FROM ${FROM}
+
+# Switch sang root để pip install
+USER root
+
+# COPY toàn bộ plugin source vào image
+COPY netbox_smartlock_plugin/ /opt/netbox/plugin_src/
+COPY upload_file_plugin-production/ /opt/netbox/upload_file_plugin_src/
+
+# Cài plugin vào venv của NetBox ở editable mode
+# netbox-docker dùng uv thay vì pip
+ENV VIRTUAL_ENV=/opt/netbox/venv
+RUN /usr/local/bin/uv pip install --no-cache setuptools wheel && \
+    /usr/local/bin/uv pip install --no-cache --no-build-isolation \
+        -e /opt/netbox/upload_file_plugin_src \
+        -e /opt/netbox/plugin_src
+
+RUN cp -r /opt/netbox/upload_file_plugin_src/upload_file_plugin/static/. /opt/netbox/netbox/static/ && \
+    if [ -d /opt/netbox/plugin_src/netbox_smartlock/static ]; then cp -r /opt/netbox/plugin_src/netbox_smartlock/static/. /opt/netbox/netbox/static/; fi && \
+    chown -R netbox:root /opt/netbox/netbox/static
+
+# Trả lại user netbox
+USER netbox

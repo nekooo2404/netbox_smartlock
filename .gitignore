@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual environments (anchor to repo root so netbox-docker/env/ is not ignored on Windows)
+.venv/
+venv/
+/env/
+/ENV/
+
+# Django
+db.sqlite3
+*.sqlite3
+media/
+staticfiles/
+local_settings.py
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Real NetBox Docker env files contain local secrets/passwords.
+# Keep only templates tracked.
+netbox-docker/env/*
+!netbox-docker/env/*.example
+
+# IDE / editor
+.idea/
+.vscode/
+.cursor/
+.cursorignore
+.cursorrules
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Logs
+*.log
+logs/
+
+# Docker / local runtime artifacts
+netbox-docker/.env
+netbox-docker/env/*.local
+
+# Local exports / reports
+*.xls
+*.xlsx
+*.csv
+
+# Project-specific local app
+smartlock/db.sqlite3
+smartlock/media/

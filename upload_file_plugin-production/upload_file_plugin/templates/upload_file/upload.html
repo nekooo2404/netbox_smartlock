@@ -1,0 +1,51 @@
+{% load static %}
+
+<div
+  class="nbx-upload"
+  data-upload-url="{% url 'plugins:upload_file_plugin:upload_file' %}"
+  data-delete-temp-url="{% url 'plugins:upload_file_plugin:delete_temp_file' %}"
+  data-object-id="{{ object_id }}"
+  data-model-name="{{ model_name }}"
+  data-valid-flag="{{ valid_flg|default:'0' }}"
+  data-type-file="{{ type_file|default:'[\"jpg\", \"jpeg\", \"png\", \"gif\", \"webp\", \"bmp\"]' }}"
+>
+  <input type="hidden" class="nbx-upload-all-files" name="all_files">
+  <input type="hidden" class="nbx-upload-uploaded-files" name="uploaded_files_json">
+  <input type="hidden" class="nbx-upload-has-changes" name="has_file_changes" value="false">
+  <input
+    type="file"
+    class="d-none nbx-upload-input"
+    name="files"
+    accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,image/jpeg,image/png,image/gif,image/webp,image/bmp"
+    multiple
+  >
+
+  <div class="input-group">
+    <button type="button" class="btn btn-outline-secondary nbx-upload-browse">
+      <i class="mdi mdi-paperclip"></i> Browse
+    </button>
+    <div class="form-control nbx-upload-dropzone">
+      <span class="text-muted">Drop images here or choose files</span>
+    </div>
+  </div>
+
+  <div class="form-text">Images are uploaded temporarily and attached when the object is saved. Accepted: jpg, jpeg, png, gif, webp, bmp.</div>
+  <div class="alert alert-danger d-none mt-2 nbx-upload-errors"></div>
+  <div class="list-group mt-2 nbx-upload-list"></div>
+</div>
+
+<script id="upload-file-initial-files" type="application/json">[
+  {% for file in uploaded_files %}
+    {
+      "id": {{ file.id }},
+      "file_name": "{{ file.file_name|default:file.file.name|escapejs }}",
+      "path": "{{ file.file.name|escapejs }}",
+      "size": {{ file.file.size|default:0 }}
+    }{% if not forloop.last %},{% endif %}
+  {% endfor %}
+]</script>
+<script src="{% static 'upload_file_plugin/js/upload_utils.js' %}"></script>
+<script src="{% static 'upload_file_plugin/js/upload_validation.js' %}"></script>
+<script src="{% static 'upload_file_plugin/js/upload_api.js' %}"></script>
+<script src="{% static 'upload_file_plugin/js/upload_render.js' %}"></script>
+<script src="{% static 'upload_file_plugin/js/upload_widget.js' %}"></script>

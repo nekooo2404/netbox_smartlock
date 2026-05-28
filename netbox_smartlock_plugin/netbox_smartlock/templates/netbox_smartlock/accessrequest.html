@@ -1,0 +1,302 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+{% load render_table from django_tables2 %}
+
+{% block extra_controls %}
+  {% if object.can_submit and can_send_access_request %}
+    <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_send' pk=object.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">
+        <i class="mdi mdi-send"></i> Send Request
+      </button>
+    </form>
+  {% endif %}
+  {% if can_manage_access_request and object.can_admin_confirm %}
+    <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_confirm' pk=object.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">
+        <i class="mdi mdi-check-circle-outline"></i> Confirm
+      </button>
+    </form>
+  {% endif %}
+  {% if can_manage_access_request and object.can_admin_decide %}
+    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#accept-request-modal">
+      <i class="mdi mdi-check-bold"></i> Accept
+    </button>
+    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#reject-request-modal">
+      <i class="mdi mdi-close-thick"></i> Reject
+    </button>
+  {% endif %}
+  {% if can_manage_access_request and object.can_admin_complete %}
+    <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#complete-request-modal">
+      <i class="mdi mdi-flag-checkered"></i> Complete
+    </button>
+  {% endif %}
+{% endblock %}
+
+{% block tabs %}
+  <ul class="nav nav-tabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="access-request-detail-tab" data-bs-toggle="tab" data-bs-target="#access-request-detail" type="button" role="tab" aria-controls="access-request-detail" aria-selected="true">
+        Phiếu yêu cầu ra vào
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="access-request-history-tab" data-bs-toggle="tab" data-bs-target="#access-request-history" type="button" role="tab" aria-controls="access-request-history" aria-selected="false">
+        Lịch sử yêu cầu
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="access-request-changelog-tab" data-bs-toggle="tab" data-bs-target="#access-request-changelog" type="button" role="tab" aria-controls="access-request-changelog" aria-selected="false">
+        Nhật ký thay đổi
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="access-request-persons-tab" data-bs-toggle="tab" data-bs-target="#access-request-persons" type="button" role="tab" aria-controls="access-request-persons" aria-selected="false">
+        Đối tượng
+        <span class="badge text-bg-secondary">{{ persons|length }}</span>
+      </button>
+    </li>
+  </ul>
+{% endblock %}
+
+{% block content %}
+<div class="tab-pane show active" id="access-request-detail" role="tabpanel" aria-labelledby="access-request-detail-tab">
+  <div class="row mb-3">
+    <div class="col-md-6">
+      <div class="card">
+        <h5 class="card-header">Access Request</h5>
+        <div class="card-body">
+          <table class="table table-hover attr-table">
+            <tr><th scope="row">Name</th><td>{{ object.name }}</td></tr>
+            <tr><th scope="row">Expected Date</th><td>{{ object.expected_date|default:"-" }}</td></tr>
+            <tr><th scope="row">Reason</th><td>{{ object.reason|default:"-" }}</td></tr>
+            <tr><th scope="row">Status</th><td>{{ object.get_status_display }}</td></tr>
+            <tr><th scope="row">Region</th><td>{% if object.region %}<a href="{{ object.region.get_absolute_url }}">{{ object.region }}</a>{% else %}-{% endif %}</td></tr>
+            <tr><th scope="row">Site</th><td>{% if object.site %}<a href="{{ object.site.get_absolute_url }}">{{ object.site }}</a>{% else %}-{% endif %}</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-pane" id="access-request-history" role="tabpanel" aria-labelledby="access-request-history-tab">
+  <div class="card">
+    <h5 class="card-header">Request History</h5>
+    <div class="card-body table-responsive">
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th>Actor</th>
+            <th>Action</th>
+            <th>Status</th>
+            <th>Time</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in history_entries %}
+            <tr>
+              <td>{% if entry.actor %}{{ entry.actor }}{% else %}-{% endif %}</td>
+              <td>{{ entry.get_action_display }}</td>
+              <td>{{ entry.get_status_display }}</td>
+              <td>{{ entry.time|isodatetime:"minutes" }}</td>
+              <td>{{ entry.description|default:"-" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-muted">No request history found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="tab-pane" id="access-request-changelog" role="tabpanel" aria-labelledby="access-request-changelog-tab">
+  <div class="card">
+    <h5 class="card-header">Change Log</h5>
+    <div class="card-body table-responsive">
+      <table class="table table-hover">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Username</th>
+            <th>Full Name</th>
+            <th>Action</th>
+            <th>Type</th>
+            <th>Object</th>
+            <th>Request ID</th>
+            <th>Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for change in changelog_entries %}
+            <tr>
+              <td>{{ change.time|isodatetime:"minutes" }}</td>
+              <td>{{ change.user_name|default:"-" }}</td>
+              <td>{% if change.user and change.user.get_full_name %}{{ change.user.get_full_name }}{% else %}-{% endif %}</td>
+              <td>{{ change.get_action_display }}</td>
+              <td>{{ change.changed_object_type|default:"-" }}</td>
+              <td>{{ change.object_repr|default:"-" }}</td>
+              <td>{{ change.request_id|default:"-" }}</td>
+              <td>{{ change.message|default:"-" }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8" class="text-muted">No change log entries found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="tab-pane" id="access-request-persons" role="tabpanel" aria-labelledby="access-request-persons-tab">
+  <div class="card">
+    <h5 class="card-header">Persons</h5>
+    <div class="card-body">
+      {% if object.can_guest_edit and not is_access_request_admin and can_add_access_request_persons %}
+        <div class="btn-list mb-3">
+          <a href="{% url 'plugins:netbox_smartlock:accessrequestperson_add' %}?request={{ object.pk }}&return_url={{ object.get_absolute_url }}" class="btn btn-primary">
+            <i class="mdi mdi-plus-thick"></i> Add Person
+          </a>
+          <a href="{% url 'plugins:netbox_smartlock:accessrequestperson_bulk_import' %}?request={{ object.pk }}&return_url={{ object.get_absolute_url }}" class="btn btn-outline-primary">
+            <i class="mdi mdi-upload"></i> Import Persons
+          </a>
+        </div>
+      {% endif %}
+      <div class="table-responsive">
+        {% render_table persons_table %}
+      </div>
+      {% if can_manage_access_request_persons %}
+        <div class="table-responsive mt-3">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th>Verification</th>
+                <th>Access</th>
+                <th>Admin Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for person in persons %}
+                <tr>
+                  <td><a href="{{ person.get_absolute_url }}">{{ person }}</a></td>
+                  <td>{{ person.get_verify_status_display }}</td>
+                  <td>{{ person.get_access_status_display }}</td>
+                  <td>
+                    <div class="btn-list">
+                      {% if person.pk in admin_action_person_ids and person.can_admin_verify %}
+                        <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_verify_valid' pk=person.pk %}" class="d-inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="return_url" value="{{ object.get_absolute_url }}">
+                          <button type="submit" class="btn btn-sm btn-success">
+                            <i class="mdi mdi-check"></i> Valid
+                          </button>
+                        </form>
+                        <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_verify_invalid' pk=person.pk %}" class="d-inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="return_url" value="{{ object.get_absolute_url }}">
+                          <button type="submit" class="btn btn-sm btn-danger">
+                            <i class="mdi mdi-close"></i> Invalid
+                          </button>
+                        </form>
+                      {% endif %}
+                      {% if person.pk in admin_action_person_ids and person.can_check_in %}
+                        <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_check_in' pk=person.pk %}" class="d-inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="return_url" value="{{ object.get_absolute_url }}">
+                          <button type="submit" class="btn btn-sm btn-primary">
+                            <i class="mdi mdi-login"></i> In
+                          </button>
+                        </form>
+                      {% endif %}
+                      {% if person.pk in admin_action_person_ids and person.can_check_out %}
+                        <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_check_out' pk=person.pk %}" class="d-inline">
+                          {% csrf_token %}
+                          <input type="hidden" name="return_url" value="{{ object.get_absolute_url }}">
+                          <button type="submit" class="btn btn-sm btn-secondary">
+                            <i class="mdi mdi-logout"></i> Out
+                          </button>
+                        </form>
+                      {% endif %}
+                      {% if person.pk not in admin_action_person_ids or not person.can_admin_verify and not person.can_check_in and not person.can_check_out %}
+                        <span class="text-muted">-</span>
+                      {% endif %}
+                    </div>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td colspan="4" class="text-muted">No persons found.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if can_manage_access_request and object.can_admin_decide %}
+  <div class="modal fade" id="accept-request-modal" tabindex="-1" aria-labelledby="accept-request-modal-label" aria-hidden="true">
+    <div class="modal-dialog">
+      <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_accept' pk=object.pk %}" class="modal-content">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="accept-request-modal-label">Accept Access Request</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label" for="accept-description">Description</label>
+          <textarea class="form-control" id="accept-description" name="description" rows="3"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Accept</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal fade" id="reject-request-modal" tabindex="-1" aria-labelledby="reject-request-modal-label" aria-hidden="true">
+    <div class="modal-dialog">
+      <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_reject' pk=object.pk %}" class="modal-content">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="reject-request-modal-label">Reject Access Request</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label" for="reject-description">Reason</label>
+          <textarea class="form-control" id="reject-description" name="description" rows="3" required></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">Reject</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endif %}
+{% if can_manage_access_request and object.can_admin_complete %}
+  <div class="modal fade" id="complete-request-modal" tabindex="-1" aria-labelledby="complete-request-modal-label" aria-hidden="true">
+    <div class="modal-dialog">
+      <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_complete' pk=object.pk %}" class="modal-content">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="complete-request-modal-label">Complete Access Request</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          Complete access request <strong>{{ object.name }}</strong>?
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-success">Complete</button>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

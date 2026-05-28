@@ -1,0 +1,3 @@
+
+-e /opt/netbox/upload_file_plugin_src
+-e /opt/netbox/plugin_src
