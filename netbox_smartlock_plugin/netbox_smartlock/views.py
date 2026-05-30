@@ -18,12 +18,26 @@ from netbox.views.generic import (
     ObjectListView,
     ObjectView,
 )
-from netbox.object_actions import AddObject, BulkDelete, BulkEdit, BulkImport, BulkRename, CloneObject, DeleteObject, EditObject
+from netbox.object_actions import (
+    AddObject,
+    BulkDelete,
+    BulkEdit,
+    BulkImport,
+    BulkRename,
+    CloneObject,
+    DeleteObject,
+    EditObject,
+)
 
 from .change_logging import annotate_creator
 from .contracts import SMARTLOCK_IMPORT_CSV_DESCRIPTION, SMARTLOCK_IMPORT_HELP_ITEMS
 from .exports import AccessRequestExportService, SmartLockExportService
-from .filtersets import AccessRequestFilterSet, AccessRequestPersonFilterSet, AssetGroupFilterSet, SmartLockFilterSet
+from .filtersets import (
+    AccessRequestFilterSet,
+    AccessRequestPersonFilterSet,
+    AssetGroupFilterSet,
+    SmartLockFilterSet,
+)
 from .forms import (
     AccessRequestBulkEditForm,
     AccessRequestFilterForm,
@@ -40,7 +54,21 @@ from .forms import (
     SmartLockForm,
     SmartLockImportForm,
 )
+from .labels import apply_model_label_context
 from .mapping import format_rack_lookup, get_warranty_state
+from .messages import (
+    ACCESS_REQUEST_ADMIN_CRUD_MESSAGE,
+    ACCESS_REQUEST_GUEST_DELETE_DENIED_MESSAGE,
+    ACCESS_REQUEST_GUEST_EDIT_DENIED_MESSAGE,
+    ACCESS_REQUEST_OBJECT_WORKFLOW_PERMISSION_MESSAGE,
+    ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE,
+    ACCESS_REQUEST_PERSON_DELETE_DENIED_MESSAGE,
+    ACCESS_REQUEST_PERSON_EDIT_DENIED_MESSAGE,
+    ACCESS_REQUEST_PERSON_OBJECT_WORKFLOW_PERMISSION_MESSAGE,
+    ACCESS_REQUEST_PERSON_WORKFLOW_PERMISSION_MESSAGE,
+    ACCESS_REQUEST_SEND_PERMISSION_MESSAGE,
+    ACCESS_REQUEST_WORKFLOW_PERMISSION_MESSAGE,
+)
 from .models import AccessRequest, AccessRequestPerson, AssetGroup, SmartLock
 from .permissions import (
     can_manage_access_request,
@@ -53,36 +81,80 @@ from .permissions import (
     restrict_access_requests_for_user,
 )
 from .tables import AccessRequestPersonTable, AccessRequestTable, AssetGroupTable, SmartLockTable
+from .ui import (
+    ACCESS_REQUEST_PERSON_ACCESS_LABELS,
+    ACCESS_REQUEST_PERSON_VERIFY_LABELS,
+    ACCESS_REQUEST_STATUS_LABELS,
+    RACK_FACE_LABELS,
+    SMARTLOCK_STATUS_LABELS,
+    VIETNAMESE_DETAIL_ACTIONS,
+    VIETNAMESE_LIST_ACTIONS,
+    VIETNAMESE_LIST_ACTIONS_WITHOUT_RENAME,
+    WARRANTY_STATE_LABELS,
+    label_for,
+)
 from .upload_files import annotate_file_count, files_for_object
 
 
+def request_scoped_form(form_class, **attrs):
+    """Tạo form class theo request để giữ tương thích với generic view của NetBox."""
+    return type(f"RequestScoped{form_class.__name__}", (form_class,), attrs)
+
+
+def enforce_guest_crud_access(user, message):
+    if is_access_request_admin(user):
+        raise PermissionDenied(message)
+
+
 def filter_guest_object_actions(actions, instance):
+    """Ẩn nút sửa/xóa ở UI khi object đang ở trạng thái Guest không được thao tác."""
     filtered_actions = []
     for action in actions:
-        if action is EditObject and not getattr(instance, "can_guest_edit", True):
+        if issubclass(action, EditObject) and not getattr(instance, "can_guest_edit", True):
             continue
-        if action is DeleteObject and not getattr(instance, "can_guest_delete", True):
+        if issubclass(action, DeleteObject) and not getattr(instance, "can_guest_delete", True):
             continue
         filtered_actions.append(action)
     return tuple(filtered_actions)
 
 
 def filter_access_request_actions_for_user(actions, user, instance_or_model=None):
+    """Admin dùng workflow riêng nên không hiển thị CRUD thường trên phiếu/đối tượng."""
     if not is_access_request_admin(user):
         if instance_or_model is not None and not isinstance(instance_or_model, type):
             return filter_guest_object_actions(actions, instance_or_model)
         return actions
 
-    blocked_actions = {AddObject, BulkImport, BulkEdit, BulkRename, BulkDelete, CloneObject, EditObject, DeleteObject}
-    return tuple(action for action in actions if action not in blocked_actions)
+    blocked_actions = (AddObject, BulkImport, BulkEdit, BulkRename, BulkDelete, CloneObject, EditObject, DeleteObject)
+    return tuple(action for action in actions if not any(issubclass(action, blocked) for blocked in blocked_actions))
+
+
+class VietnameseModelLabelMixin:
+    """Bổ sung label tiếng Việt cho template dùng lại generic của NetBox."""
+
+    def get_extra_context(self, request, instance=None):
+        try:
+            if instance is not None:
+                context = super().get_extra_context(request, instance)
+            else:
+                context = super().get_extra_context(request)
+        except AttributeError:
+            context = {}
+
+        target = instance
+        if target is None:
+            target = getattr(self, "model", None)
+        if target is None:
+            target = getattr(getattr(self, "queryset", None), "model", None)
+
+        return apply_model_label_context(context or {}, target)
 
 
 class AccessRequestAdminCrudGuardMixin:
-    admin_crud_message = "Admin users must use workflow actions instead of generic access request CRUD."
+    admin_crud_message = ACCESS_REQUEST_ADMIN_CRUD_MESSAGE
 
     def dispatch(self, request, *args, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied(self.admin_crud_message)
+        enforce_guest_crud_access(request.user, self.admin_crud_message)
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -94,31 +166,41 @@ class AssetGroupListView(ObjectListView):
     table = AssetGroupTable
     filterset = AssetGroupFilterSet
     filterset_form = AssetGroupFilterForm
+    template_name = "netbox_smartlock/object_list.html"
+    actions = VIETNAMESE_LIST_ACTIONS_WITHOUT_RENAME
+
+    def get_extra_context(self, request):
+        return apply_model_label_context({}, AssetGroup)
 
 
 class AssetGroupView(ObjectView):
     queryset = AssetGroup.objects.prefetch_related("tags")
+    template_name = "netbox_smartlock/assetgroup.html"
+    actions = VIETNAMESE_DETAIL_ACTIONS
 
     def get_extra_context(self, request, instance):
         smartlocks = instance.smartlocks.select_related("site", "location", "rack").prefetch_related("tags")
-        return {
+        return apply_model_label_context({
             "smartlocks": smartlocks,
             "uploaded_files": files_for_object(instance, model_name="assetgroup"),
-        }
+        }, instance)
 
 
-class AssetGroupEditView(ObjectEditView):
+class AssetGroupEditView(VietnameseModelLabelMixin, ObjectEditView):
     queryset = AssetGroup.objects.all()
     form = AssetGroupForm
+    template_name = "netbox_smartlock/object_edit.html"
 
 
-class AssetGroupImportView(BulkImportView):
+class AssetGroupImportView(VietnameseModelLabelMixin, BulkImportView):
     queryset = AssetGroup.objects.all()
     model_form = AssetGroupImportForm
+    template_name = "netbox_smartlock/bulk_import.html"
 
 
-class AssetGroupDeleteView(ObjectDeleteView):
+class AssetGroupDeleteView(VietnameseModelLabelMixin, ObjectDeleteView):
     queryset = AssetGroup.objects.all()
+    template_name = "netbox_smartlock/object_delete.html"
 
 
 class AssetGroupChangeLogView(ObjectChangeLogView):
@@ -138,9 +220,11 @@ class SmartLockListView(ObjectListView):
     filterset = SmartLockFilterSet
     filterset_form = SmartLockFilterForm
     template_name = "netbox_smartlock/smartlock_list.html"
+    actions = VIETNAMESE_LIST_ACTIONS_WITHOUT_RENAME
 
     def get_extra_context(self, request):
-        return SmartLockExportService.build_control_urls(request)
+        context = SmartLockExportService.build_control_urls(request)
+        return apply_model_label_context(context, SmartLock)
 
     def export_table(self, table, columns=None, filename=None, delimiter=None):
         return SmartLockExportService.export_core_csv(
@@ -166,6 +250,7 @@ class SmartLockView(ObjectView):
     queryset = SmartLock.objects.select_related(
         "asset_group", "region", "site", "location", "rack"
     ).prefetch_related("tags")
+    actions = VIETNAMESE_DETAIL_ACTIONS
 
     def get_extra_context(self, request, instance):
         content_type = ContentType.objects.get_for_model(instance)
@@ -179,46 +264,48 @@ class SmartLockView(ObjectView):
             .values_list("user_name", flat=True)
             .first()
         )
-        return {
+        return apply_model_label_context({
             "uploaded_files": files_for_object(instance, model_name="smartlock"),
             "rack_lookup": format_rack_lookup(instance.rack),
             "warranty_state": get_warranty_state(instance.warranty_expiration_date),
+            "warranty_state_label": label_for(WARRANTY_STATE_LABELS, get_warranty_state(instance.warranty_expiration_date)),
+            "smartlock_status_label": label_for(SMARTLOCK_STATUS_LABELS, instance.status),
+            "rack_face_label": label_for(RACK_FACE_LABELS, instance.rack_face),
             "created_by_name": creator or "-",
-        }
+        }, instance)
 
 
-class SmartLockEditView(ObjectEditView):
+class SmartLockEditView(VietnameseModelLabelMixin, ObjectEditView):
     queryset = SmartLock.objects.all()
     form = SmartLockForm
+    template_name = "netbox_smartlock/object_edit.html"
 
     def dispatch(self, request, *args, **kwargs):
-        class RequestScopedSmartLockForm(SmartLockForm):
-            request_user = request.user
-
-        self.form = RequestScopedSmartLockForm
+        self.form = request_scoped_form(SmartLockForm, request_user=request.user)
         return super().dispatch(request, *args, **kwargs)
 
 
-class SmartLockImportView(BulkImportView):
+class SmartLockImportView(VietnameseModelLabelMixin, BulkImportView):
     queryset = SmartLock.objects.all()
     model_form = SmartLockImportForm
+    template_name = "netbox_smartlock/bulk_import.html"
 
     def dispatch(self, request, *args, **kwargs):
-        class RequestScopedSmartLockImportForm(SmartLockImportForm):
-            request_user = request.user
-
-        self.model_form = RequestScopedSmartLockImportForm
+        self.model_form = request_scoped_form(SmartLockImportForm, request_user=request.user)
         return super().dispatch(request, *args, **kwargs)
 
     def get_extra_context(self, request):
-        return {
+        context = super().get_extra_context(request)
+        context.update({
             "csv_description": SMARTLOCK_IMPORT_CSV_DESCRIPTION,
             "csv_help_items": SMARTLOCK_IMPORT_HELP_ITEMS,
-        }
+        })
+        return context
 
 
-class SmartLockDeleteView(ObjectDeleteView):
+class SmartLockDeleteView(VietnameseModelLabelMixin, ObjectDeleteView):
     queryset = SmartLock.objects.all()
+    template_name = "netbox_smartlock/object_delete.html"
 
 
 class SmartLockChangeLogView(ObjectChangeLogView):
@@ -235,6 +322,7 @@ class AccessRequestListView(ObjectListView):
     filterset = AccessRequestFilterSet
     filterset_form = AccessRequestFilterForm
     template_name = "netbox_smartlock/accessrequest_list.html"
+    actions = VIETNAMESE_LIST_ACTIONS
 
     def get_queryset(self, request):
         return restrict_access_requests_for_user(super().get_queryset(request), request.user)
@@ -244,7 +332,8 @@ class AccessRequestListView(ObjectListView):
         return filter_access_request_actions_for_user(actions, user, model)
 
     def get_extra_context(self, request):
-        return AccessRequestExportService.build_control_urls(request)
+        context = AccessRequestExportService.build_control_urls(request)
+        return apply_model_label_context(context, AccessRequest)
 
     def get(self, request):
         if AccessRequestExportService.is_custom_export_request(request):
@@ -262,6 +351,7 @@ class AccessRequestListView(ObjectListView):
 class AccessRequestView(ObjectView):
     queryset = AccessRequest.objects.select_related("region", "site").prefetch_related("tags")
     template_name = "netbox_smartlock/accessrequest.html"
+    actions = VIETNAMESE_DETAIL_ACTIONS
 
     def get_queryset(self, request):
         return restrict_access_requests_for_user(super().get_queryset(request), request.user)
@@ -302,30 +392,30 @@ class AccessRequestView(ObjectView):
             .order_by("-time", "-pk")
         )
 
-        return {
+        return apply_model_label_context({
             "persons": persons,
             "persons_table": persons_table,
             "history_entries": instance.history_entries.select_related("actor"),
             "changelog_entries": changelog_entries,
+            "access_request_status_label": label_for(ACCESS_REQUEST_STATUS_LABELS, instance.status),
+            "person_verify_labels": ACCESS_REQUEST_PERSON_VERIFY_LABELS,
+            "person_access_labels": ACCESS_REQUEST_PERSON_ACCESS_LABELS,
             "is_access_request_admin": is_admin,
             "can_manage_access_request": can_manage_request,
             "can_manage_access_request_persons": can_manage_persons,
             "can_add_access_request_persons": request.user.has_perm("netbox_smartlock.add_accessrequestperson"),
             "can_send_access_request": can_submit_access_request(request.user, instance),
             "admin_action_person_ids": admin_action_person_ids,
-        }
+        }, instance)
 
 
-class AccessRequestEditView(AccessRequestAdminCrudGuardMixin, ObjectEditView):
+class AccessRequestEditView(AccessRequestAdminCrudGuardMixin, VietnameseModelLabelMixin, ObjectEditView):
     queryset = AccessRequest.objects.all()
     form = AccessRequestForm
     template_name = "netbox_smartlock/object_edit_cancel_confirm.html"
 
     def dispatch(self, request, *args, **kwargs):
-        class RequestScopedAccessRequestForm(AccessRequestForm):
-            request_user = request.user
-
-        self.form = RequestScopedAccessRequestForm
+        self.form = request_scoped_form(AccessRequestForm, request_user=request.user)
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self, request):
@@ -339,22 +429,20 @@ class AccessRequestEditView(AccessRequestAdminCrudGuardMixin, ObjectEditView):
     def get_object(self, **kwargs):
         obj = super().get_object(**kwargs)
         if obj.pk and not obj.can_guest_edit:
-            raise PermissionDenied("Accepted or completed access requests cannot be edited by a guest user.")
+            raise PermissionDenied(ACCESS_REQUEST_GUEST_EDIT_DENIED_MESSAGE)
         return obj
 
 
-class AccessRequestImportView(AccessRequestAdminCrudGuardMixin, BulkImportView):
+class AccessRequestImportView(AccessRequestAdminCrudGuardMixin, VietnameseModelLabelMixin, BulkImportView):
     queryset = AccessRequest.objects.all()
     model_form = AccessRequestImportForm
+    template_name = "netbox_smartlock/bulk_import.html"
 
     def get_queryset(self, request):
         return restrict_access_requests_for_user(super().get_queryset(request), request.user)
 
     def dispatch(self, request, *args, **kwargs):
-        class RequestScopedAccessRequestImportForm(AccessRequestImportForm):
-            request_user = request.user
-
-        self.model_form = RequestScopedAccessRequestImportForm
+        self.model_form = request_scoped_form(AccessRequestImportForm, request_user=request.user)
         return super().dispatch(request, *args, **kwargs)
 
     def save_object(self, object_form, request):
@@ -365,91 +453,91 @@ class AccessRequestImportView(AccessRequestAdminCrudGuardMixin, BulkImportView):
 
 class AccessRequestBulkGuardMixin:
     def get_selected_requests(self, request):
+        """Lấy đúng tập phiếu được chọn, bao gồm trường hợp chọn tất cả sau filter."""
         queryset = restrict_access_requests_for_user(self.queryset, request.user)
         if request.POST.get("_all") and self.filterset is not None:
             return self.filterset(request.GET, queryset, request=request).qs
         pk_list = request.POST.getlist("pk")
         return queryset.filter(pk__in=pk_list)
 
+    def enforce_guest_bulk_access(self, request, *, denied_message):
+        enforce_guest_crud_access(request.user, ACCESS_REQUEST_ADMIN_CRUD_MESSAGE)
+        if self.get_selected_requests(request).filter(
+            status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_COMPLETED)
+        ).exists():
+            raise PermissionDenied(denied_message)
 
-class AccessRequestBulkEditView(AccessRequestBulkGuardMixin, BulkEditView):
+
+class AccessRequestBulkEditView(AccessRequestBulkGuardMixin, VietnameseModelLabelMixin, BulkEditView):
     queryset = AccessRequest.objects.all()
     filterset = AccessRequestFilterSet
     table = AccessRequestTable
     form = AccessRequestBulkEditForm
+    template_name = "netbox_smartlock/bulk_edit.html"
 
     def dispatch(self, request, *args, **kwargs):
-        class RequestScopedAccessRequestBulkEditForm(AccessRequestBulkEditForm):
-            request_user = request.user
-
-        self.form = RequestScopedAccessRequestBulkEditForm
+        self.form = request_scoped_form(AccessRequestBulkEditForm, request_user=request.user)
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self, request):
         return restrict_access_requests_for_user(super().get_queryset(request), request.user)
 
     def get(self, request):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
+        enforce_guest_crud_access(request.user, ACCESS_REQUEST_ADMIN_CRUD_MESSAGE)
         return super().get(request)
 
     def post(self, request, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
-        if self.get_selected_requests(request).filter(
-            status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_COMPLETED)
-        ).exists():
-            raise PermissionDenied("Accepted or completed access requests cannot be edited by a guest user.")
+        self.enforce_guest_bulk_access(
+            request,
+            denied_message=ACCESS_REQUEST_GUEST_EDIT_DENIED_MESSAGE,
+        )
         return super().post(request, **kwargs)
 
 
-class AccessRequestBulkRenameView(AccessRequestBulkGuardMixin, BulkRenameView):
+class AccessRequestBulkRenameView(AccessRequestBulkGuardMixin, VietnameseModelLabelMixin, BulkRenameView):
     queryset = AccessRequest.objects.all()
     filterset = AccessRequestFilterSet
+    template_name = "netbox_smartlock/bulk_rename.html"
 
     def get_queryset(self, request):
         return restrict_access_requests_for_user(super().get_queryset(request), request.user)
 
     def get(self, request):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
+        enforce_guest_crud_access(request.user, ACCESS_REQUEST_ADMIN_CRUD_MESSAGE)
         return super().get(request)
 
     def post(self, request, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
-        if self.get_selected_requests(request).filter(
-            status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_COMPLETED)
-        ).exists():
-            raise PermissionDenied("Accepted or completed access requests cannot be edited by a guest user.")
+        self.enforce_guest_bulk_access(
+            request,
+            denied_message=ACCESS_REQUEST_GUEST_EDIT_DENIED_MESSAGE,
+        )
         return super().post(request, **kwargs)
 
 
-class AccessRequestBulkDeleteView(AccessRequestBulkGuardMixin, BulkDeleteView):
+class AccessRequestBulkDeleteView(AccessRequestBulkGuardMixin, VietnameseModelLabelMixin, BulkDeleteView):
     queryset = AccessRequest.objects.all()
     filterset = AccessRequestFilterSet
     table = AccessRequestTable
+    template_name = "netbox_smartlock/bulk_delete.html"
 
     def get_queryset(self, request):
         return restrict_access_requests_for_user(super().get_queryset(request), request.user)
 
     def get(self, request):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
+        enforce_guest_crud_access(request.user, ACCESS_REQUEST_ADMIN_CRUD_MESSAGE)
         return super().get(request)
 
     def post(self, request, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
-        if self.get_selected_requests(request).filter(
-            status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_COMPLETED)
-        ).exists():
-            raise PermissionDenied("Accepted or completed access requests cannot be deleted by a guest user.")
+        self.enforce_guest_bulk_access(
+            request,
+            denied_message=ACCESS_REQUEST_GUEST_DELETE_DENIED_MESSAGE,
+        )
         return super().post(request, **kwargs)
 
 
-class AccessRequestDeleteView(AccessRequestAdminCrudGuardMixin, ObjectDeleteView):
+class AccessRequestDeleteView(AccessRequestAdminCrudGuardMixin, VietnameseModelLabelMixin, ObjectDeleteView):
     queryset = AccessRequest.objects.all()
+    template_name = "netbox_smartlock/object_delete.html"
 
     def get_queryset(self, request):
         return restrict_access_requests_for_user(super().get_queryset(request), request.user)
@@ -457,7 +545,7 @@ class AccessRequestDeleteView(AccessRequestAdminCrudGuardMixin, ObjectDeleteView
     def get_object(self, **kwargs):
         obj = super().get_object(**kwargs)
         if obj.pk and not obj.can_guest_delete:
-            raise PermissionDenied("Accepted or completed access requests cannot be deleted by a guest user.")
+            raise PermissionDenied(ACCESS_REQUEST_GUEST_DELETE_DENIED_MESSAGE)
         return obj
 
 
@@ -477,14 +565,14 @@ class AccessRequestSendView(ObjectView):
     def post(self, request, **kwargs):
         instance = self.get_object(**kwargs)
         if not can_submit_access_request(request.user, instance):
-            raise PermissionDenied("Only the request creator with NetBox change permission can submit this access request.")
+            raise PermissionDenied(ACCESS_REQUEST_SEND_PERMISSION_MESSAGE)
 
         try:
             instance.submit(user=request.user)
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
         else:
-            messages.success(request, f"Submitted access request {instance}.")
+            messages.success(request, f"Đã gửi phiếu yêu cầu {instance}.")
         return redirect(instance.get_absolute_url())
 
 
@@ -495,11 +583,11 @@ class AccessRequestWorkflowView(ObjectView):
 
     def post(self, request, **kwargs):
         if not can_manage_access_requests(request.user):
-            raise PermissionDenied("Only Admin users with NetBox change permission can perform this access request action.")
+            raise PermissionDenied(ACCESS_REQUEST_WORKFLOW_PERMISSION_MESSAGE)
 
         instance = self.get_object(**kwargs)
         if not can_manage_access_request(request.user, instance):
-            raise PermissionDenied("Only Admin users with NetBox change permission for this object can perform this access request action.")
+            raise PermissionDenied(ACCESS_REQUEST_OBJECT_WORKFLOW_PERMISSION_MESSAGE)
 
         description = request.POST.get("description", "")
         try:
@@ -513,22 +601,22 @@ class AccessRequestWorkflowView(ObjectView):
 
 class AccessRequestConfirmView(AccessRequestWorkflowView):
     action = "confirm"
-    success_message = "Confirmed access request {instance}."
+    success_message = "Đã xác nhận phiếu yêu cầu {instance}."
 
 
 class AccessRequestAcceptView(AccessRequestWorkflowView):
     action = "accept"
-    success_message = "Accepted access request {instance}."
+    success_message = "Đã chấp nhận phiếu yêu cầu {instance}."
 
 
 class AccessRequestRejectView(AccessRequestWorkflowView):
     action = "reject"
-    success_message = "Rejected access request {instance}."
+    success_message = "Đã từ chối phiếu yêu cầu {instance}."
 
 
 class AccessRequestCompleteView(AccessRequestWorkflowView):
     action = "complete"
-    success_message = "Completed access request {instance}."
+    success_message = "Đã hoàn thành phiếu yêu cầu {instance}."
 
 
 class AccessRequestPersonListView(ObjectListView):
@@ -539,6 +627,11 @@ class AccessRequestPersonListView(ObjectListView):
     table = AccessRequestPersonTable
     filterset = AccessRequestPersonFilterSet
     filterset_form = AccessRequestPersonFilterForm
+    template_name = "netbox_smartlock/object_list.html"
+    actions = VIETNAMESE_LIST_ACTIONS_WITHOUT_RENAME
+
+    def get_extra_context(self, request):
+        return apply_model_label_context({}, AccessRequestPerson)
 
     def get_queryset(self, request):
         return restrict_access_request_persons_for_user(super().get_queryset(request), request.user)
@@ -548,107 +641,116 @@ class AccessRequestPersonListView(ObjectListView):
         return filter_access_request_actions_for_user(actions, user, model)
 
 
-class AccessRequestPersonImportView(BulkImportView):
+class AccessRequestPersonImportView(VietnameseModelLabelMixin, BulkImportView):
     queryset = AccessRequestPerson.objects.all()
     model_form = AccessRequestPersonImportForm
+    template_name = "netbox_smartlock/bulk_import.html"
 
     def get_queryset(self, request):
         return restrict_access_request_persons_for_user(super().get_queryset(request), request.user)
 
     def dispatch(self, request, *args, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
+        enforce_guest_crud_access(request.user, ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE)
         scoped_request_id_value = request.GET.get("request") or request.POST.get("request")
-
-        class RequestScopedAccessRequestPersonImportForm(AccessRequestPersonImportForm):
-            request_user = request.user
-            scoped_request_id = scoped_request_id_value
-
-        self.model_form = RequestScopedAccessRequestPersonImportForm
+        self.model_form = request_scoped_form(
+            AccessRequestPersonImportForm,
+            request_user=request.user,
+            scoped_request_id=scoped_request_id_value,
+        )
         return super().dispatch(request, *args, **kwargs)
 
 
 class AccessRequestPersonBulkGuardMixin:
     def get_selected_persons(self, request):
+        """Lấy đúng tập đối tượng được chọn trong scope nhìn thấy của user."""
         queryset = restrict_access_request_persons_for_user(self.queryset, request.user)
         if request.POST.get("_all") and self.filterset is not None:
             return self.filterset(request.GET, queryset, request=request).qs
         pk_list = request.POST.getlist("pk")
         return queryset.filter(pk__in=pk_list)
 
+    def enforce_guest_person_bulk_edit_access(self, request):
+        """Bulk edit chỉ được phép khi mọi đối tượng còn sửa được theo workflow Guest."""
+        enforce_guest_crud_access(request.user, ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE)
+        selected = self.get_selected_persons(request)
+        has_locked_verify_status = selected.exclude(
+            verify_status__in=(AccessRequestPerson.VERIFY_PENDING, AccessRequestPerson.VERIFY_INVALID)
+        ).exclude(
+            request__status=AccessRequest.STATUS_REJECTED
+        ).exists()
+        has_locked_request_status = selected.filter(
+            request__status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_COMPLETED)
+        ).exists()
+        if has_locked_verify_status or has_locked_request_status:
+            raise PermissionDenied(ACCESS_REQUEST_PERSON_EDIT_DENIED_MESSAGE)
 
-class AccessRequestPersonBulkEditView(AccessRequestPersonBulkGuardMixin, BulkEditView):
+    def enforce_guest_person_bulk_delete_access(self, request):
+        """Bulk delete cho phép xóa sau accepted/rejected nhưng chặn completed."""
+        enforce_guest_crud_access(request.user, ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE)
+        selected = self.get_selected_persons(request)
+        has_locked_verify_status = selected.exclude(
+            verify_status__in=(AccessRequestPerson.VERIFY_PENDING, AccessRequestPerson.VERIFY_INVALID)
+        ).exclude(
+            request__status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_REJECTED)
+        ).exists()
+        has_completed_request = selected.filter(request__status=AccessRequest.STATUS_COMPLETED).exists()
+        if has_locked_verify_status or has_completed_request:
+            raise PermissionDenied(ACCESS_REQUEST_PERSON_DELETE_DENIED_MESSAGE)
+
+
+class AccessRequestPersonBulkEditView(AccessRequestPersonBulkGuardMixin, VietnameseModelLabelMixin, BulkEditView):
     queryset = AccessRequestPerson.objects.all()
     filterset = AccessRequestPersonFilterSet
     table = AccessRequestPersonTable
     form = AccessRequestPersonBulkEditForm
+    template_name = "netbox_smartlock/bulk_edit.html"
 
     def dispatch(self, request, *args, **kwargs):
         selected_persons_queryset_value = None
         if request.method == "POST":
             selected_persons_queryset_value = self.get_selected_persons(request)
 
-        class RequestScopedAccessRequestPersonBulkEditForm(AccessRequestPersonBulkEditForm):
-            request_user = request.user
-            selected_persons_queryset = selected_persons_queryset_value
-
-        self.form = RequestScopedAccessRequestPersonBulkEditForm
+        self.form = request_scoped_form(
+            AccessRequestPersonBulkEditForm,
+            request_user=request.user,
+            selected_persons_queryset=selected_persons_queryset_value,
+        )
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self, request):
         return restrict_access_request_persons_for_user(super().get_queryset(request), request.user)
 
     def get(self, request):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
+        enforce_guest_crud_access(request.user, ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE)
         return super().get(request)
 
     def post(self, request, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
-        selected = self.get_selected_persons(request)
-        if selected.exclude(
-            verify_status__in=(AccessRequestPerson.VERIFY_PENDING, AccessRequestPerson.VERIFY_INVALID)
-        ).exclude(
-            request__status=AccessRequest.STATUS_REJECTED
-        ).exists() or selected.filter(
-            request__status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_COMPLETED)
-        ).exists():
-            raise PermissionDenied("These access request persons cannot be edited in the current workflow state.")
+        self.enforce_guest_person_bulk_edit_access(request)
         return super().post(request, **kwargs)
 
 
-class AccessRequestPersonBulkDeleteView(AccessRequestPersonBulkGuardMixin, BulkDeleteView):
+class AccessRequestPersonBulkDeleteView(AccessRequestPersonBulkGuardMixin, VietnameseModelLabelMixin, BulkDeleteView):
     queryset = AccessRequestPerson.objects.all()
     filterset = AccessRequestPersonFilterSet
     table = AccessRequestPersonTable
+    template_name = "netbox_smartlock/bulk_delete.html"
 
     def get_queryset(self, request):
         return restrict_access_request_persons_for_user(super().get_queryset(request), request.user)
 
     def get(self, request):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
+        enforce_guest_crud_access(request.user, ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE)
         return super().get(request)
 
     def post(self, request, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
-        selected = self.get_selected_persons(request)
-        if selected.exclude(
-            verify_status__in=(AccessRequestPerson.VERIFY_PENDING, AccessRequestPerson.VERIFY_INVALID)
-        ).exclude(
-            request__status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_REJECTED)
-        ).exists() or selected.filter(
-            request__status=AccessRequest.STATUS_COMPLETED
-        ).exists():
-            raise PermissionDenied("These access request persons cannot be deleted in the current workflow state.")
+        self.enforce_guest_person_bulk_delete_access(request)
         return super().post(request, **kwargs)
 
 
 class AccessRequestPersonView(ObjectView):
     queryset = AccessRequestPerson.objects.select_related("request", "location").prefetch_related("tags")
     template_name = "netbox_smartlock/accessrequestperson.html"
+    actions = VIETNAMESE_DETAIL_ACTIONS
 
     def get_queryset(self, request):
         return restrict_access_request_persons_for_user(super().get_queryset(request), request.user)
@@ -658,24 +760,21 @@ class AccessRequestPersonView(ObjectView):
         return filter_access_request_actions_for_user(actions, user, model)
 
     def get_extra_context(self, request, instance):
-        return {
+        return apply_model_label_context({
             "uploaded_files": files_for_object(instance, model_name="accessrequestperson"),
             "is_access_request_admin": is_access_request_admin(request.user),
             "can_manage_access_request_persons": can_manage_access_request_person(request.user, instance),
-        }
+        }, instance)
 
 
-class AccessRequestPersonEditView(AccessRequestAdminCrudGuardMixin, ObjectEditView):
+class AccessRequestPersonEditView(AccessRequestAdminCrudGuardMixin, VietnameseModelLabelMixin, ObjectEditView):
     queryset = AccessRequestPerson.objects.all()
     form = AccessRequestPersonForm
     template_name = "netbox_smartlock/object_edit_cancel_confirm.html"
-    admin_crud_message = "Admin users must use workflow actions instead of generic access request person CRUD."
+    admin_crud_message = ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE
 
     def dispatch(self, request, *args, **kwargs):
-        class RequestScopedAccessRequestPersonForm(AccessRequestPersonForm):
-            request_user = request.user
-
-        self.form = RequestScopedAccessRequestPersonForm
+        self.form = request_scoped_form(AccessRequestPersonForm, request_user=request.user)
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self, request):
@@ -689,13 +788,14 @@ class AccessRequestPersonEditView(AccessRequestAdminCrudGuardMixin, ObjectEditVi
     def get_object(self, **kwargs):
         obj = super().get_object(**kwargs)
         if obj.pk and not obj.can_guest_edit:
-            raise PermissionDenied("This access request person cannot be edited in the current workflow state.")
+            raise PermissionDenied(ACCESS_REQUEST_PERSON_EDIT_DENIED_MESSAGE)
         return obj
 
 
-class AccessRequestPersonDeleteView(AccessRequestAdminCrudGuardMixin, ObjectDeleteView):
+class AccessRequestPersonDeleteView(AccessRequestAdminCrudGuardMixin, VietnameseModelLabelMixin, ObjectDeleteView):
     queryset = AccessRequestPerson.objects.all()
-    admin_crud_message = "Admin users must use workflow actions instead of generic access request person CRUD."
+    admin_crud_message = ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE
+    template_name = "netbox_smartlock/object_delete.html"
 
     def get_queryset(self, request):
         return restrict_access_request_persons_for_user(super().get_queryset(request), request.user)
@@ -703,7 +803,7 @@ class AccessRequestPersonDeleteView(AccessRequestAdminCrudGuardMixin, ObjectDele
     def get_object(self, **kwargs):
         obj = super().get_object(**kwargs)
         if obj.pk and not obj.can_guest_delete:
-            raise PermissionDenied("This access request person cannot be deleted in the current workflow state.")
+            raise PermissionDenied(ACCESS_REQUEST_PERSON_DELETE_DENIED_MESSAGE)
         return obj
 
 
@@ -721,11 +821,11 @@ class AccessRequestPersonWorkflowView(ObjectView):
 
     def post(self, request, **kwargs):
         if not can_manage_access_request_persons(request.user):
-            raise PermissionDenied("Only Admin users with NetBox change permission can perform this access request person action.")
+            raise PermissionDenied(ACCESS_REQUEST_PERSON_WORKFLOW_PERMISSION_MESSAGE)
 
         person = self.get_object(**kwargs)
         if not can_manage_access_request_person(request.user, person):
-            raise PermissionDenied("Only Admin users with NetBox change permission for this object can perform this access request person action.")
+            raise PermissionDenied(ACCESS_REQUEST_PERSON_OBJECT_WORKFLOW_PERMISSION_MESSAGE)
 
         description = request.POST.get("description", "")
         try:
@@ -739,19 +839,19 @@ class AccessRequestPersonWorkflowView(ObjectView):
 
 class AccessRequestPersonVerifyValidView(AccessRequestPersonWorkflowView):
     action = "mark_valid"
-    success_message = "Marked {person} as valid."
+    success_message = "Đã đánh dấu {person} là hợp lệ."
 
 
 class AccessRequestPersonVerifyInvalidView(AccessRequestPersonWorkflowView):
     action = "mark_invalid"
-    success_message = "Marked {person} as invalid."
+    success_message = "Đã đánh dấu {person} là không hợp lệ."
 
 
-class AccessRequestPersonCheckInView(AccessRequestPersonWorkflowView):
-    action = "check_in"
-    success_message = "Checked in {person}."
+class AccessRequestPersonInView(AccessRequestPersonWorkflowView):
+    action = "mark_in"
+    success_message = "Đã chuyển {person} từ Out sang In."
 
 
-class AccessRequestPersonCheckOutView(AccessRequestPersonWorkflowView):
-    action = "check_out"
-    success_message = "Checked out {person}."
+class AccessRequestPersonOutView(AccessRequestPersonWorkflowView):
+    action = "mark_out"
+    success_message = "Đã chuyển {person} từ In sang Out."

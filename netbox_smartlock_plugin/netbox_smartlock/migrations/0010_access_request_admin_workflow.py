@@ -20,8 +20,8 @@ ACCESS_REQUEST_HISTORY_ACTION_CHOICES = [
     ("complete", "Complete"),
     ("verify_valid", "Verify Valid"),
     ("verify_invalid", "Verify Invalid"),
-    ("check_in", "Check In"),
-    ("check_out", "Check Out"),
+    ("in", "In"),
+    ("out", "Out"),
 ]
 
 

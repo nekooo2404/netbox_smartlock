@@ -20,6 +20,7 @@ def _file_extension(file_name):
 
 
 def _parse_allowed_file_types(raw_value):
+    """Widget có thể gửi list JSON hoặc chuỗi cũ; normalize về danh sách extension."""
     if not raw_value:
         return []
 
@@ -50,6 +51,7 @@ def _file_size_error(file_name):
 
 
 def _json_login_required(request):
+    """AJAX upload cần JSON 401 thay vì redirect HTML của login_required."""
     if request.user.is_authenticated:
         return None
     return JsonResponse(
@@ -60,6 +62,7 @@ def _json_login_required(request):
 
 @require_http_methods(["POST"])
 def upload_file_view(request):
+    """Nhận file từ widget và lưu vào thư mục tạm trước khi form chính được submit."""
     if response := _json_login_required(request):
         return response
 
@@ -128,6 +131,7 @@ def upload_file_view(request):
 
 @require_http_methods(["POST"])
 def delete_temp_file_view(request):
+    """Chỉ cho xóa file tạm thuộc MEDIA_ROOT/uploads/tmp."""
     if response := _json_login_required(request):
         return response
 
@@ -149,6 +153,7 @@ def delete_temp_file_view(request):
 
         abs_file_path = candidate_path.resolve()
         try:
+            # Không dùng startswith path string vì dễ bị bypass bằng path gần giống.
             abs_file_path.relative_to(allowed_dir)
         except ValueError:
             return JsonResponse({"success": False, "error": "Invalid file path"}, status=400)

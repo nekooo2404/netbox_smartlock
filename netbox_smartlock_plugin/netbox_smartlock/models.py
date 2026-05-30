@@ -19,16 +19,32 @@ from netbox.models import NetBoxModel, OrganizationalModel
 from upload_file_plugin.integration import delete_uploaded_files
 
 from .mapping import normalize_text, sync_smartlock_hierarchy
+from .messages import (
+    ACCESS_REQUEST_GUEST_DELETE_DENIED_MESSAGE,
+    ACCESS_REQUEST_PERSON_DELETE_DENIED_MESSAGE,
+    ACCESS_REQUEST_PERSON_VERIFY_REQUIRES_CONFIRMED_MESSAGE,
+)
+from .ui import (
+    ACCESS_REQUEST_HISTORY_ACTION_LABELS,
+    ACCESS_REQUEST_PERSON_ACCESS_LABELS,
+    ACCESS_REQUEST_PERSON_VERIFY_LABELS,
+    ACCESS_REQUEST_STATUS_LABELS,
+    ASSET_GROUP_STATUS_LABELS,
+    RACK_FACE_LABELS,
+    SMARTLOCK_STATUS_LABELS,
+    label_for,
+)
 
 
 def validate_file_size(value):
-    """Kept for historical migrations that referenced the legacy attachment field."""
+    """Giữ lại cho các migration cũ từng tham chiếu field attachment legacy."""
     max_size = 25 * 1024 * 1024
     if value.size > max_size:
-        raise ValidationError("Attached file must not exceed 25MB.")
+        raise ValidationError("File đính kèm không được vượt quá 25MB.")
 
 
 def add_months(value, months):
+    """Cộng tháng theo lịch, tự kẹp ngày cuối tháng để tính hạn bảo hành ổn định."""
     month_index = value.month - 1 + months
     year = value.year + month_index // 12
     month = month_index % 12 + 1
@@ -37,7 +53,7 @@ def add_months(value, months):
 
 
 class AssetGroup(OrganizationalModel):
-    """Asset grouping and device classification."""
+    """Nhóm phân loại tài sản SmartLock."""
 
     STATUS_ACTIVE = "active"
     STATUS_INACTIVE = "inactive"
@@ -66,6 +82,10 @@ class AssetGroup(OrganizationalModel):
     def __str__(self):
         return self.name
 
+    @property
+    def status_label(self):
+        return label_for(ASSET_GROUP_STATUS_LABELS, self.status)
+
     def get_absolute_url(self):
         return reverse("plugins:netbox_smartlock:assetgroup", kwargs={"pk": self.pk})
 
@@ -81,7 +101,7 @@ class AssetGroup(OrganizationalModel):
 
 
 class SmartLock(NetBoxModel):
-    """Smart Lock device."""
+    """Thiết bị khóa thông minh gắn với cây vị trí DCIM của NetBox."""
 
     STATUS_ACTIVE = "active"
     STATUS_BACKUP = "backup"
@@ -188,6 +208,14 @@ class SmartLock(NetBoxModel):
     def __str__(self):
         return f"{self.code} - {self.name}"
 
+    @property
+    def status_label(self):
+        return label_for(SMARTLOCK_STATUS_LABELS, self.status)
+
+    @property
+    def rack_face_label(self):
+        return label_for(RACK_FACE_LABELS, self.rack_face)
+
     def get_absolute_url(self):
         return reverse("plugins:netbox_smartlock:smartlock", kwargs={"pk": self.pk})
 
@@ -196,12 +224,13 @@ class SmartLock(NetBoxModel):
         errors = {}
 
         if self.rack_face and not self.rack_id:
-            errors["rack"] = "Select a Rack before selecting a rack face."
+            errors["rack"] = "Vui lòng chọn tủ rack trước khi chọn mặt tủ rack."
 
+        # Rack/Location/Site/Region là dữ liệu DCIM gốc của NetBox; plugin chỉ đồng bộ tham chiếu.
         sync_smartlock_hierarchy(self, errors=errors)
 
         if self.warranty_period is not None and not self.bought_date:
-            errors["bought_date"] = "Purchase date is required when warranty period is set."
+            errors["bought_date"] = "Bắt buộc nhập ngày mua khi thiết lập thời hạn bảo hành."
 
         if errors:
             raise ValidationError(errors)
@@ -229,7 +258,7 @@ class SmartLock(NetBoxModel):
 
 
 class AccessRequest(NetBoxModel):
-    """Guest request for entering a data center site."""
+    """Phiếu Guest yêu cầu vào ra một địa điểm DCIM."""
 
     STATUS_DRAFT = "draft"
     STATUS_SUBMITTED = "submitted"
@@ -246,6 +275,8 @@ class AccessRequest(NetBoxModel):
         (STATUS_REJECTED, "Rejected"),
         (STATUS_COMPLETED, "Completed"),
     )
+    GUEST_LOCKED_STATUSES = (STATUS_ACCEPTED, STATUS_COMPLETED)
+    SUBMITTABLE_STATUSES = (STATUS_DRAFT, STATUS_REJECTED)
 
     name = models.CharField(max_length=100, unique=True, verbose_name="Request Name")
     expected_date = models.DateField(verbose_name="Expected Date")
@@ -293,16 +324,20 @@ class AccessRequest(NetBoxModel):
         return self.name
 
     @property
+    def status_label(self):
+        return label_for(ACCESS_REQUEST_STATUS_LABELS, self.status)
+
+    @property
     def can_guest_edit(self):
-        return self.status not in (self.STATUS_ACCEPTED, self.STATUS_COMPLETED)
+        return self.status not in self.GUEST_LOCKED_STATUSES
 
     @property
     def can_guest_delete(self):
-        return self.status not in (self.STATUS_ACCEPTED, self.STATUS_COMPLETED)
+        return self.status not in self.GUEST_LOCKED_STATUSES
 
     @property
     def can_submit(self):
-        if self.status not in (self.STATUS_DRAFT, self.STATUS_REJECTED):
+        if self.status not in self.SUBMITTABLE_STATUSES:
             return False
         if not self.pk:
             return False
@@ -334,7 +369,7 @@ class AccessRequest(NetBoxModel):
         errors = {}
 
         if self.site_id and self.region_id and self.site.region_id != self.region_id:
-            errors["site"] = "Selected Site must belong to the selected Region."
+            errors["site"] = "Địa điểm đã chọn phải thuộc khu vực đã chọn."
 
         if errors:
             raise ValidationError(errors)
@@ -347,7 +382,7 @@ class AccessRequest(NetBoxModel):
 
     def submit(self, user=None, description=""):
         if not self.can_submit:
-            raise ValidationError("An access request must have at least one person and be editable before it can be submitted.")
+            raise ValidationError("Phiếu yêu cầu phải có ít nhất một đối tượng và còn được phép sửa trước khi gửi.")
 
         self.status = self.STATUS_SUBMITTED
         self.save(update_fields=("status", "last_updated"))
@@ -363,7 +398,7 @@ class AccessRequest(NetBoxModel):
 
     def confirm(self, user=None, description=""):
         if not self.can_admin_confirm:
-            raise ValidationError("Only submitted access requests can be confirmed by an admin.")
+            raise ValidationError("Admin chỉ được xác nhận phiếu yêu cầu đã gửi.")
 
         self.status = self.STATUS_CONFIRMED
         self.save(update_fields=("status", "last_updated"))
@@ -377,11 +412,12 @@ class AccessRequest(NetBoxModel):
 
     def accept(self, user=None, description=""):
         if not self.can_admin_decide:
-            raise ValidationError("Only confirmed access requests can be accepted.")
+            raise ValidationError("Chỉ phiếu yêu cầu đã xác nhận mới được chấp nhận.")
+        # Không chấp nhận phiếu khi còn bất kỳ đối tượng nào chưa được Admin xác minh hợp lệ.
         if self.persons.filter(verify_status=AccessRequestPerson.VERIFY_INVALID).exists():
-            raise ValidationError("Cannot accept an access request with invalid persons.")
+            raise ValidationError("Không thể chấp nhận phiếu yêu cầu có đối tượng không hợp lệ.")
         if self.persons.exclude(verify_status=AccessRequestPerson.VERIFY_VALID).exists():
-            raise ValidationError("All persons must be verified valid before an access request can be accepted.")
+            raise ValidationError("Tất cả đối tượng phải được xác minh hợp lệ trước khi chấp nhận phiếu yêu cầu.")
 
         self.status = self.STATUS_ACCEPTED
         self.save(update_fields=("status", "last_updated"))
@@ -394,16 +430,16 @@ class AccessRequest(NetBoxModel):
         )
         notify_access_request_creator(
             self,
-            subject=f"Access request accepted: {self.name}",
-            message=f"Access request {self.name} has been accepted.\nDescription: {description or '-'}",
+            subject=f"Phiếu yêu cầu đã được chấp nhận: {self.name}",
+            message=f"Phiếu yêu cầu {self.name} đã được chấp nhận.\nMô tả: {description or '-'}",
         )
         return history
 
     def reject(self, user=None, description=""):
         if self.status != self.STATUS_CONFIRMED:
-            raise ValidationError("Only confirmed access requests can be rejected.")
+            raise ValidationError("Chỉ phiếu yêu cầu đã xác nhận mới được từ chối.")
         if not normalize_text(description):
-            raise ValidationError("A rejection reason is required.")
+            raise ValidationError("Bắt buộc nhập lý do từ chối.")
 
         self.status = self.STATUS_REJECTED
         self.save(update_fields=("status", "last_updated"))
@@ -416,14 +452,14 @@ class AccessRequest(NetBoxModel):
         )
         notify_access_request_creator(
             self,
-            subject=f"Access request rejected: {self.name}",
-            message=f"Access request {self.name} has been rejected.\nReason: {description or '-'}",
+            subject=f"Phiếu yêu cầu đã bị từ chối: {self.name}",
+            message=f"Phiếu yêu cầu {self.name} đã bị từ chối.\nLý do: {description or '-'}",
         )
         return history
 
     def complete(self, user=None, description=""):
         if not self.can_admin_complete:
-            raise ValidationError("Only accepted access requests can be completed.")
+            raise ValidationError("Chỉ phiếu yêu cầu đã chấp nhận mới được hoàn thành.")
 
         self.status = self.STATUS_COMPLETED
         self.save(update_fields=("status", "last_updated"))
@@ -436,19 +472,19 @@ class AccessRequest(NetBoxModel):
         )
         notify_access_request_creator(
             self,
-            subject=f"Access request completed: {self.name}",
-            message=f"Access request {self.name} has been completed.",
+            subject=f"Phiếu yêu cầu đã hoàn thành: {self.name}",
+            message=f"Phiếu yêu cầu {self.name} đã hoàn thành.",
         )
         return history
 
     def delete(self, *args, **kwargs):
         if not self.can_guest_delete:
-            raise ValidationError("Accepted or completed access requests cannot be deleted by a guest user.")
+            raise ValidationError(ACCESS_REQUEST_GUEST_DELETE_DENIED_MESSAGE)
         return super().delete(*args, **kwargs)
 
 
 class AccessRequestPerson(NetBoxModel):
-    """Person registered by a guest for an access request."""
+    """Đối tượng vào ra do Guest khai báo trong một phiếu yêu cầu."""
 
     VIETNAMESE_MOBILE_PREFIXES = ("03", "05", "07", "08", "09")
 
@@ -467,6 +503,7 @@ class AccessRequestPerson(NetBoxModel):
         (ACCESS_OUT, "Out"),
         (ACCESS_IN, "In"),
     )
+    GUEST_MUTABLE_VERIFY_STATUSES = (VERIFY_PENDING, VERIFY_INVALID)
 
     request = models.ForeignKey(
         AccessRequest,
@@ -522,19 +559,30 @@ class AccessRequestPerson(NetBoxModel):
         return self.full_name
 
     @property
+    def verify_status_label(self):
+        return label_for(ACCESS_REQUEST_PERSON_VERIFY_LABELS, self.verify_status)
+
+    @property
+    def access_status_label(self):
+        return label_for(ACCESS_REQUEST_PERSON_ACCESS_LABELS, self.access_status)
+
+    def request_has_status(self, *statuses):
+        """Kiểm tra trạng thái phiếu bằng queryset để không phụ thuộc object request đã prefetch."""
+        if not self.request_id:
+            return False
+        return AccessRequest.objects.filter(pk=self.request_id, status__in=statuses).exists()
+
+    @property
     def can_guest_edit(self):
         if not self.request_id:
             return False
 
-        request_queryset = AccessRequest.objects.filter(pk=self.request_id)
-        if request_queryset.filter(status=AccessRequest.STATUS_REJECTED).exists():
+        if self.request_has_status(AccessRequest.STATUS_REJECTED):
             return True
 
         return bool(
-            self.verify_status in (self.VERIFY_PENDING, self.VERIFY_INVALID)
-            and request_queryset.exclude(
-                status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_COMPLETED)
-            ).exists()
+            self.verify_status in self.GUEST_MUTABLE_VERIFY_STATUSES
+            and not self.request_has_status(*AccessRequest.GUEST_LOCKED_STATUSES)
         )
 
     @property
@@ -542,48 +590,31 @@ class AccessRequestPerson(NetBoxModel):
         if not self.request_id:
             return False
 
-        request_queryset = AccessRequest.objects.filter(pk=self.request_id)
         return bool(
-            request_queryset.filter(status=AccessRequest.STATUS_REJECTED).exists()
-            or request_queryset.filter(status=AccessRequest.STATUS_ACCEPTED).exists()
+            self.request_has_status(AccessRequest.STATUS_REJECTED)
+            or self.request_has_status(AccessRequest.STATUS_ACCEPTED)
             or (
-                self.verify_status in (self.VERIFY_PENDING, self.VERIFY_INVALID)
-                and request_queryset.exclude(
-                    status__in=(AccessRequest.STATUS_ACCEPTED, AccessRequest.STATUS_COMPLETED)
-                ).exists()
+                self.verify_status in self.GUEST_MUTABLE_VERIFY_STATUSES
+                and not self.request_has_status(*AccessRequest.GUEST_LOCKED_STATUSES)
             )
         )
 
     @property
     def can_admin_verify(self):
-        return bool(
-            self.request_id
-            and AccessRequest.objects.filter(
-                pk=self.request_id,
-                status=AccessRequest.STATUS_CONFIRMED,
-            ).exists()
-        )
+        return self.request_has_status(AccessRequest.STATUS_CONFIRMED)
 
     @property
-    def can_check_in(self):
+    def can_mark_in(self):
         return bool(
-            self.request_id
-            and AccessRequest.objects.filter(
-                pk=self.request_id,
-                status=AccessRequest.STATUS_ACCEPTED,
-            ).exists()
+            self.request_has_status(AccessRequest.STATUS_ACCEPTED)
             and self.verify_status == self.VERIFY_VALID
             and self.access_status == self.ACCESS_OUT
         )
 
     @property
-    def can_check_out(self):
+    def can_mark_out(self):
         return bool(
-            self.request_id
-            and AccessRequest.objects.filter(
-                pk=self.request_id,
-                status=AccessRequest.STATUS_ACCEPTED,
-            ).exists()
+            self.request_has_status(AccessRequest.STATUS_ACCEPTED)
             and self.verify_status == self.VERIFY_VALID
             and self.access_status == self.ACCESS_IN
         )
@@ -602,17 +633,17 @@ class AccessRequestPerson(NetBoxModel):
         errors = {}
 
         if self.identity_code and (len(self.identity_code) != 12 or not self.identity_code.isdigit()):
-            errors["identity_code"] = "Identity code must contain exactly 12 digits."
+            errors["identity_code"] = "CCCD/CMND phải gồm đúng 12 chữ số."
 
         if self.phone and (
             len(self.phone) != 10
             or not self.phone.isdigit()
             or not self.phone.startswith(self.VIETNAMESE_MOBILE_PREFIXES)
         ):
-            errors["phone"] = "Phone must be a valid 10-digit Vietnamese mobile phone number."
+            errors["phone"] = "Số điện thoại phải là số di động Việt Nam hợp lệ gồm 10 chữ số."
 
         if self.location_id and self.request_id and self.location.site_id != self.request.site_id:
-            errors["location"] = "Selected Location must belong to the Access Request Site."
+            errors["location"] = "Vị trí đã chọn phải thuộc địa điểm của phiếu yêu cầu."
 
         if errors:
             raise ValidationError(errors)
@@ -629,12 +660,12 @@ class AccessRequestPerson(NetBoxModel):
 
     def delete(self, *args, **kwargs):
         if not self.can_guest_delete:
-            raise ValidationError("This access request person cannot be deleted in the current workflow state.")
+            raise ValidationError(ACCESS_REQUEST_PERSON_DELETE_DENIED_MESSAGE)
         return super().delete(*args, **kwargs)
 
     def mark_valid(self, user=None, description=""):
         if not self.can_admin_verify:
-            raise ValidationError("Persons can only be verified after the access request is confirmed by an admin.")
+            raise ValidationError(ACCESS_REQUEST_PERSON_VERIFY_REQUIRES_CONFIRMED_MESSAGE)
 
         access_request = AccessRequest.objects.get(pk=self.request_id)
         self.verify_status = self.VERIFY_VALID
@@ -644,12 +675,12 @@ class AccessRequestPerson(NetBoxModel):
             actor=user,
             action=AccessRequestHistory.ACTION_VERIFY_VALID,
             status=access_request.status,
-            description=description or f"Marked {self.full_name} as valid.",
+            description=description or f"Đánh dấu {self.full_name} là hợp lệ.",
         )
 
     def mark_invalid(self, user=None, description=""):
         if not self.can_admin_verify:
-            raise ValidationError("Persons can only be verified after the access request is confirmed by an admin.")
+            raise ValidationError(ACCESS_REQUEST_PERSON_VERIFY_REQUIRES_CONFIRMED_MESSAGE)
 
         access_request = AccessRequest.objects.get(pk=self.request_id)
         self.verify_status = self.VERIFY_INVALID
@@ -659,12 +690,12 @@ class AccessRequestPerson(NetBoxModel):
             actor=user,
             action=AccessRequestHistory.ACTION_VERIFY_INVALID,
             status=access_request.status,
-            description=description or f"Marked {self.full_name} as invalid.",
+            description=description or f"Đánh dấu {self.full_name} là không hợp lệ.",
         )
 
-    def check_in(self, user=None, description=""):
-        if not self.can_check_in:
-            raise ValidationError("Only valid persons in accepted access requests can be checked in from the Out state.")
+    def mark_in(self, user=None, description=""):
+        if not self.can_mark_in:
+            raise ValidationError("Chỉ đối tượng hợp lệ trong phiếu đã chấp nhận mới được chuyển từ Out sang In.")
 
         access_request = AccessRequest.objects.get(pk=self.request_id)
         self.access_status = self.ACCESS_IN
@@ -672,14 +703,14 @@ class AccessRequestPerson(NetBoxModel):
         return AccessRequestHistory.record(
             request=access_request,
             actor=user,
-            action=AccessRequestHistory.ACTION_CHECK_IN,
+            action=AccessRequestHistory.ACTION_IN,
             status=access_request.status,
-            description=description or f"Checked in {self.full_name}.",
+            description=description or f"Out -> In: {self.full_name}.",
         )
 
-    def check_out(self, user=None, description=""):
-        if not self.can_check_out:
-            raise ValidationError("Only checked-in persons in accepted access requests can be checked out.")
+    def mark_out(self, user=None, description=""):
+        if not self.can_mark_out:
+            raise ValidationError("Chỉ đối tượng trong phiếu đã chấp nhận mới được chuyển từ In sang Out.")
 
         access_request = AccessRequest.objects.get(pk=self.request_id)
         self.access_status = self.ACCESS_OUT
@@ -687,14 +718,14 @@ class AccessRequestPerson(NetBoxModel):
         return AccessRequestHistory.record(
             request=access_request,
             actor=user,
-            action=AccessRequestHistory.ACTION_CHECK_OUT,
+            action=AccessRequestHistory.ACTION_OUT,
             status=access_request.status,
-            description=description or f"Checked out {self.full_name}.",
+            description=description or f"In -> Out: {self.full_name}.",
         )
 
 
 class AccessRequestHistory(models.Model):
-    """Business history for access request workflow actions."""
+    """Lịch sử nghiệp vụ riêng cho workflow phiếu yêu cầu vào ra."""
 
     ACTION_CREATE = "create"
     ACTION_UPDATE = "update"
@@ -705,8 +736,8 @@ class AccessRequestHistory(models.Model):
     ACTION_COMPLETE = "complete"
     ACTION_VERIFY_VALID = "verify_valid"
     ACTION_VERIFY_INVALID = "verify_invalid"
-    ACTION_CHECK_IN = "check_in"
-    ACTION_CHECK_OUT = "check_out"
+    ACTION_IN = "in"
+    ACTION_OUT = "out"
 
     ACTION_CHOICES = (
         (ACTION_CREATE, "Create"),
@@ -718,8 +749,8 @@ class AccessRequestHistory(models.Model):
         (ACTION_COMPLETE, "Complete"),
         (ACTION_VERIFY_VALID, "Verify Valid"),
         (ACTION_VERIFY_INVALID, "Verify Invalid"),
-        (ACTION_CHECK_IN, "Check In"),
-        (ACTION_CHECK_OUT, "Check Out"),
+        (ACTION_IN, "In"),
+        (ACTION_OUT, "Out"),
     )
 
     request = models.ForeignKey(
@@ -749,6 +780,14 @@ class AccessRequestHistory(models.Model):
     def __str__(self):
         return f"{self.get_action_display()} - {self.get_status_display()}"
 
+    @property
+    def action_label(self):
+        return label_for(ACCESS_REQUEST_HISTORY_ACTION_LABELS, self.action)
+
+    @property
+    def status_label(self):
+        return label_for(ACCESS_REQUEST_STATUS_LABELS, self.status)
+
     @classmethod
     def record(cls, *, request, actor=None, action, status, description=""):
         return cls.objects.create(
@@ -761,6 +800,7 @@ class AccessRequestHistory(models.Model):
 
 
 def get_access_request_creator(access_request):
+    """Lấy người tạo phiếu, ưu tiên field mới và fallback về ObjectChange legacy."""
     if getattr(access_request, "created_by_id", None):
         return access_request.created_by
 
@@ -796,6 +836,7 @@ def notify_access_request_creator(access_request, *, subject, message):
 
 @receiver(pre_delete, sender=AccessRequestPerson)
 def delete_access_request_person_files(sender, instance, **kwargs):
+    """Dọn file đính kèm khi xóa đối tượng vào ra bằng bất kỳ đường nào."""
     delete_uploaded_files(instance, model_name="accessrequestperson")
 
 
@@ -813,13 +854,13 @@ def notify_access_request_admins(access_request, submitted_by=None):
     if not recipients:
         return 0
 
-    subject = f"Access request submitted: {access_request.name}"
-    actor_name = getattr(submitted_by, "get_username", lambda: "")() or "Guest user"
+    subject = f"Phiếu yêu cầu đã gửi: {access_request.name}"
+    actor_name = getattr(submitted_by, "get_username", lambda: "")() or "Guest"
     message = (
-        f"{actor_name} submitted access request {access_request.name}.\n"
-        f"Expected date: {access_request.expected_date}\n"
-        f"Site: {access_request.site or '-'}\n"
-        f"Status: {access_request.get_status_display()}"
+        f"{actor_name} đã gửi phiếu yêu cầu {access_request.name}.\n"
+        f"Ngày dự kiến: {access_request.expected_date}\n"
+        f"Địa điểm: {access_request.site or '-'}\n"
+        f"Trạng thái: {access_request.status_label}"
     )
     return send_mail(
         subject,

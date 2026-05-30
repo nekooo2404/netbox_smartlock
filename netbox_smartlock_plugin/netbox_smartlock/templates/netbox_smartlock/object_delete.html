@@ -1,0 +1,72 @@
+{% extends 'generic/object_delete.html' %}
+{% load form_helpers %}
+
+{% block title %}Xóa {{ smartlock_model_label }}?{% endblock title %}
+
+{% block content %}
+  <div class="modal modal-lg" tabindex="-1" style="display: block; position: static">
+    <div class="modal-dialog">
+      <div class="modal-content border-1 border-danger">
+        <form action="{{ form_url }}" method="post">
+          {% csrf_token %}
+          {% for field in form.hidden_fields %}
+            {{ field }}
+          {% endfor %}
+
+          <div class="modal-header">
+            <h5 class="modal-title">Xác nhận xóa</h5>
+          </div>
+
+          <div class="modal-body">
+            <p>
+              Bạn có chắc muốn <strong class="text-danger">xóa</strong> {{ smartlock_model_label }} <strong>{{ object }}</strong>?
+            </p>
+            {% if dependent_objects %}
+              <p>Các đối tượng sau cũng sẽ bị xóa theo thao tác này.</p>
+              <div class="accordion mb-3" id="deleteAccordion">
+                {% for model, instances in dependent_objects.items %}
+                  <div class="accordion-item">
+                    <h2 class="accordion-header h4" id="deleteheading{{ forloop.counter }}">
+                      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ forloop.counter }}" aria-expanded="false" aria-controls="collapse{{ forloop.counter }}">
+                        {{ instances|length }} đối tượng phụ thuộc
+                      </button>
+                    </h2>
+                    <div id="collapse{{ forloop.counter }}" class="accordion-collapse collapse" aria-labelledby="deleteheading{{ forloop.counter }}" data-bs-parent="#deleteAccordion">
+                      <div class="accordion-body p-0">
+                        <div class="list-group list-group-flush">
+                          {% for instance in instances %}
+                            {% with url=instance.get_absolute_url %}
+                              <a {% if url %}href="{{ url }}" {% endif %}class="list-group-item list-group-item-action">{{ instance }}</a>
+                            {% endwith %}
+                          {% endfor %}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+            {% if form.changelog_message %}
+              <div class="bg-primary-subtle border border-primary rounded-1 pt-3 px-3">
+                <div class="mb-3">
+                  <label class="form-label" for="{{ form.changelog_message.id_for_label }}">Thông điệp nhật ký thay đổi</label>
+                  {{ form.changelog_message }}
+                </div>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="modal-footer">
+            {% if return_url %}
+              <a href="{{ return_url }}" class="btn btn-outline-secondary">Hủy</a>
+            {% else %}
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+            {% endif %}
+            <button type="submit" class="btn btn-danger">Xóa</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock content %}

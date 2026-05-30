@@ -14,6 +14,8 @@ from .services import (
 
 
 class UploadFileWidget(forms.Widget):
+    """Widget trung gian giữ JSON payload để form chính tự đồng bộ file sau khi save."""
+
     template_name = "upload_file/widgets/upload_file.html"
 
     def __init__(self, *, instance=None, model_name=None, valid_flg="0", type_file=None, attrs=None):
@@ -53,6 +55,8 @@ class UploadFileWidget(forms.Widget):
 
 
 class UploadFileFormMixin:
+    """Mixin thêm field upload tái sử dụng cho các NetBox model form."""
+
     upload_file_field_name = "upload_files"
     upload_file_label = "Attachments"
     upload_file_model_name = None

@@ -1,19 +1,33 @@
 {% extends 'generic/object.html' %}
 
+{% block breadcrumbs %}
+  <li class="breadcrumb-item">
+    <a href="{% url 'plugins:netbox_smartlock:assetgroup_list' %}">Nhóm tài sản</a>
+  </li>
+{% endblock breadcrumbs %}
+
+{% block tabs %}
+  <ul class="nav nav-tabs" role="presentation">
+    <li class="nav-item">
+      <a class="nav-link{% if not tab %} active{% endif %}" href="{{ object.get_absolute_url }}">Nhóm tài sản</a>
+    </li>
+  </ul>
+{% endblock tabs %}
+
 {% block content %}
 <div class="row mb-3">
   <div class="col-md-6">
     <div class="card">
-      <h5 class="card-header">Information</h5>
+      <h5 class="card-header">Thông tin</h5>
       <div class="card-body">
         <table class="table table-hover attr-table">
-          <tr><th scope="row">Name</th><td>{{ object.name }}</td></tr>
+          <tr><th scope="row">Tên</th><td>{{ object.name }}</td></tr>
           <tr><th scope="row">Slug</th><td><code>{{ object.slug }}</code></td></tr>
-          <tr><th scope="row">Code</th><td>{{ object.code|default:"-" }}</td></tr>
-          <tr><th scope="row">Status</th><td>{{ object.get_status_display }}</td></tr>
-          <tr><th scope="row">Description</th><td>{{ object.description|default:"-" }}</td></tr>
+          <tr><th scope="row">Mã</th><td>{{ object.code|default:"-" }}</td></tr>
+          <tr><th scope="row">Trạng thái</th><td>{{ object.status_label }}</td></tr>
+          <tr><th scope="row">Mô tả</th><td>{{ object.description|default:"-" }}</td></tr>
           <tr>
-            <th scope="row">Attachments</th>
+            <th scope="row">File đính kèm</th>
             <td>
               {% if uploaded_files %}
                 <ul class="list-unstyled mb-0">
@@ -36,7 +50,7 @@
   </div>
   <div class="col-md-6">
     <div class="card">
-      <h5 class="card-header">Smart Locks ({{ smartlocks.count }})</h5>
+      <h5 class="card-header">Khóa thông minh ({{ smartlocks.count }})</h5>
       <div class="card-body">
         {% if smartlocks %}
           <ul class="list-unstyled mb-0">
@@ -45,7 +59,7 @@
             {% endfor %}
           </ul>
         {% else %}
-          <span class="text-muted">No Smart Locks assigned.</span>
+          <span class="text-muted">Chưa gán khóa thông minh.</span>
         {% endif %}
       </div>
     </div>

@@ -2,12 +2,20 @@
 {% load helpers %}
 {% load render_table from django_tables2 %}
 
+{% block breadcrumbs %}
+  <li class="breadcrumb-item">
+    <a href="{% url 'plugins:netbox_smartlock:accessrequest_list' %}">Phiếu yêu cầu vào ra</a>
+  </li>
+{% endblock breadcrumbs %}
+
+{% block subtitle %}{% endblock subtitle %}
+
 {% block extra_controls %}
   {% if object.can_submit and can_send_access_request %}
     <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_send' pk=object.pk %}" class="d-inline">
       {% csrf_token %}
       <button type="submit" class="btn btn-primary">
-        <i class="mdi mdi-send"></i> Send Request
+        <i class="mdi mdi-send"></i> Gửi yêu cầu
       </button>
     </form>
   {% endif %}
@@ -15,21 +23,21 @@
     <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_confirm' pk=object.pk %}" class="d-inline">
       {% csrf_token %}
       <button type="submit" class="btn btn-primary">
-        <i class="mdi mdi-check-circle-outline"></i> Confirm
+        <i class="mdi mdi-check-circle-outline"></i> Xác nhận
       </button>
     </form>
   {% endif %}
   {% if can_manage_access_request and object.can_admin_decide %}
     <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#accept-request-modal">
-      <i class="mdi mdi-check-bold"></i> Accept
+      <i class="mdi mdi-check-bold"></i> Chấp nhận
     </button>
     <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#reject-request-modal">
-      <i class="mdi mdi-close-thick"></i> Reject
+      <i class="mdi mdi-close-thick"></i> Từ chối
     </button>
   {% endif %}
   {% if can_manage_access_request and object.can_admin_complete %}
     <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#complete-request-modal">
-      <i class="mdi mdi-flag-checkered"></i> Complete
+      <i class="mdi mdi-flag-checkered"></i> Hoàn thành
     </button>
   {% endif %}
 {% endblock %}
@@ -38,12 +46,12 @@
   <ul class="nav nav-tabs" role="tablist">
     <li class="nav-item" role="presentation">
       <button class="nav-link active" id="access-request-detail-tab" data-bs-toggle="tab" data-bs-target="#access-request-detail" type="button" role="tab" aria-controls="access-request-detail" aria-selected="true">
-        Phiếu yêu cầu ra vào
+        Phiếu yêu cầu vào ra
       </button>
     </li>
     <li class="nav-item" role="presentation">
       <button class="nav-link" id="access-request-history-tab" data-bs-toggle="tab" data-bs-target="#access-request-history" type="button" role="tab" aria-controls="access-request-history" aria-selected="false">
-        Lịch sử yêu cầu
+        Lịch sử phiếu
       </button>
     </li>
     <li class="nav-item" role="presentation">
@@ -53,7 +61,7 @@
     </li>
     <li class="nav-item" role="presentation">
       <button class="nav-link" id="access-request-persons-tab" data-bs-toggle="tab" data-bs-target="#access-request-persons" type="button" role="tab" aria-controls="access-request-persons" aria-selected="false">
-        Đối tượng
+        Đối tượng vào ra
         <span class="badge text-bg-secondary">{{ persons|length }}</span>
       </button>
     </li>
@@ -65,15 +73,15 @@
   <div class="row mb-3">
     <div class="col-md-6">
       <div class="card">
-        <h5 class="card-header">Access Request</h5>
+        <h5 class="card-header">Phiếu yêu cầu vào ra</h5>
         <div class="card-body">
           <table class="table table-hover attr-table">
-            <tr><th scope="row">Name</th><td>{{ object.name }}</td></tr>
-            <tr><th scope="row">Expected Date</th><td>{{ object.expected_date|default:"-" }}</td></tr>
-            <tr><th scope="row">Reason</th><td>{{ object.reason|default:"-" }}</td></tr>
-            <tr><th scope="row">Status</th><td>{{ object.get_status_display }}</td></tr>
-            <tr><th scope="row">Region</th><td>{% if object.region %}<a href="{{ object.region.get_absolute_url }}">{{ object.region }}</a>{% else %}-{% endif %}</td></tr>
-            <tr><th scope="row">Site</th><td>{% if object.site %}<a href="{{ object.site.get_absolute_url }}">{{ object.site }}</a>{% else %}-{% endif %}</td></tr>
+            <tr><th scope="row">Tên phiếu</th><td>{{ object.name }}</td></tr>
+            <tr><th scope="row">Ngày dự kiến</th><td>{{ object.expected_date|default:"-" }}</td></tr>
+            <tr><th scope="row">Lý do</th><td>{{ object.reason|default:"-" }}</td></tr>
+            <tr><th scope="row">Trạng thái</th><td>{{ object.status_label }}</td></tr>
+            <tr><th scope="row">Khu vực</th><td>{% if object.region %}<a href="{{ object.region.get_absolute_url }}">{{ object.region }}</a>{% else %}-{% endif %}</td></tr>
+            <tr><th scope="row">Địa điểm</th><td>{% if object.site %}<a href="{{ object.site.get_absolute_url }}">{{ object.site }}</a>{% else %}-{% endif %}</td></tr>
           </table>
         </div>
       </div>
@@ -83,29 +91,29 @@
 
 <div class="tab-pane" id="access-request-history" role="tabpanel" aria-labelledby="access-request-history-tab">
   <div class="card">
-    <h5 class="card-header">Request History</h5>
+    <h5 class="card-header">Lịch sử phiếu yêu cầu</h5>
     <div class="card-body table-responsive">
       <table class="table table-hover">
         <thead>
           <tr>
-            <th>Actor</th>
-            <th>Action</th>
-            <th>Status</th>
-            <th>Time</th>
-            <th>Description</th>
+            <th>Người thao tác</th>
+            <th>Hành động</th>
+            <th>Trạng thái</th>
+            <th>Thời gian</th>
+            <th>Mô tả</th>
           </tr>
         </thead>
         <tbody>
           {% for entry in history_entries %}
             <tr>
               <td>{% if entry.actor %}{{ entry.actor }}{% else %}-{% endif %}</td>
-              <td>{{ entry.get_action_display }}</td>
-              <td>{{ entry.get_status_display }}</td>
+              <td>{{ entry.action_label }}</td>
+              <td>{{ entry.status_label }}</td>
               <td>{{ entry.time|isodatetime:"minutes" }}</td>
               <td>{{ entry.description|default:"-" }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="5" class="text-muted">No request history found.</td></tr>
+            <tr><td colspan="5" class="text-muted">Chưa có lịch sử phiếu yêu cầu.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -115,19 +123,19 @@
 
 <div class="tab-pane" id="access-request-changelog" role="tabpanel" aria-labelledby="access-request-changelog-tab">
   <div class="card">
-    <h5 class="card-header">Change Log</h5>
+    <h5 class="card-header">Nhật ký thay đổi</h5>
     <div class="card-body table-responsive">
       <table class="table table-hover">
         <thead>
           <tr>
-            <th>Time</th>
-            <th>Username</th>
-            <th>Full Name</th>
-            <th>Action</th>
-            <th>Type</th>
-            <th>Object</th>
-            <th>Request ID</th>
-            <th>Message</th>
+            <th>Thời gian</th>
+            <th>Tài khoản</th>
+            <th>Họ tên</th>
+            <th>Hành động</th>
+            <th>Loại</th>
+            <th>Đối tượng</th>
+            <th>Mã request</th>
+            <th>Thông điệp</th>
           </tr>
         </thead>
         <tbody>
@@ -143,7 +151,7 @@
               <td>{{ change.message|default:"-" }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="8" class="text-muted">No change log entries found.</td></tr>
+            <tr><td colspan="8" class="text-muted">Chưa có nhật ký thay đổi.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -153,15 +161,15 @@
 
 <div class="tab-pane" id="access-request-persons" role="tabpanel" aria-labelledby="access-request-persons-tab">
   <div class="card">
-    <h5 class="card-header">Persons</h5>
+    <h5 class="card-header">Đối tượng vào ra</h5>
     <div class="card-body">
       {% if object.can_guest_edit and not is_access_request_admin and can_add_access_request_persons %}
         <div class="btn-list mb-3">
           <a href="{% url 'plugins:netbox_smartlock:accessrequestperson_add' %}?request={{ object.pk }}&return_url={{ object.get_absolute_url }}" class="btn btn-primary">
-            <i class="mdi mdi-plus-thick"></i> Add Person
+            <i class="mdi mdi-plus-thick"></i> Thêm đối tượng
           </a>
           <a href="{% url 'plugins:netbox_smartlock:accessrequestperson_bulk_import' %}?request={{ object.pk }}&return_url={{ object.get_absolute_url }}" class="btn btn-outline-primary">
-            <i class="mdi mdi-upload"></i> Import Persons
+            <i class="mdi mdi-upload"></i> Import đối tượng
           </a>
         </div>
       {% endif %}
@@ -173,18 +181,18 @@
           <table class="table table-hover">
             <thead>
               <tr>
-                <th>Person</th>
-                <th>Verification</th>
-                <th>Access</th>
-                <th>Admin Actions</th>
+                <th>Đối tượng</th>
+                <th>Xác minh</th>
+                <th>Vào ra</th>
+                <th>Thao tác Admin</th>
               </tr>
             </thead>
             <tbody>
               {% for person in persons %}
                 <tr>
                   <td><a href="{{ person.get_absolute_url }}">{{ person }}</a></td>
-                  <td>{{ person.get_verify_status_display }}</td>
-                  <td>{{ person.get_access_status_display }}</td>
+                  <td>{{ person.verify_status_label }}</td>
+                  <td>{{ person.access_status_label }}</td>
                   <td>
                     <div class="btn-list">
                       {% if person.pk in admin_action_person_ids and person.can_admin_verify %}
@@ -192,19 +200,19 @@
                           {% csrf_token %}
                           <input type="hidden" name="return_url" value="{{ object.get_absolute_url }}">
                           <button type="submit" class="btn btn-sm btn-success">
-                            <i class="mdi mdi-check"></i> Valid
+                            <i class="mdi mdi-check"></i> Hợp lệ
                           </button>
                         </form>
                         <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_verify_invalid' pk=person.pk %}" class="d-inline">
                           {% csrf_token %}
                           <input type="hidden" name="return_url" value="{{ object.get_absolute_url }}">
                           <button type="submit" class="btn btn-sm btn-danger">
-                            <i class="mdi mdi-close"></i> Invalid
+                            <i class="mdi mdi-close"></i> Không hợp lệ
                           </button>
                         </form>
                       {% endif %}
-                      {% if person.pk in admin_action_person_ids and person.can_check_in %}
-                        <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_check_in' pk=person.pk %}" class="d-inline">
+                      {% if person.pk in admin_action_person_ids and person.can_mark_in %}
+                        <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_in' pk=person.pk %}" class="d-inline">
                           {% csrf_token %}
                           <input type="hidden" name="return_url" value="{{ object.get_absolute_url }}">
                           <button type="submit" class="btn btn-sm btn-primary">
@@ -212,8 +220,8 @@
                           </button>
                         </form>
                       {% endif %}
-                      {% if person.pk in admin_action_person_ids and person.can_check_out %}
-                        <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_check_out' pk=person.pk %}" class="d-inline">
+                      {% if person.pk in admin_action_person_ids and person.can_mark_out %}
+                        <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_out' pk=person.pk %}" class="d-inline">
                           {% csrf_token %}
                           <input type="hidden" name="return_url" value="{{ object.get_absolute_url }}">
                           <button type="submit" class="btn btn-sm btn-secondary">
@@ -221,14 +229,14 @@
                           </button>
                         </form>
                       {% endif %}
-                      {% if person.pk not in admin_action_person_ids or not person.can_admin_verify and not person.can_check_in and not person.can_check_out %}
+                      {% if person.pk not in admin_action_person_ids or not person.can_admin_verify and not person.can_mark_in and not person.can_mark_out %}
                         <span class="text-muted">-</span>
                       {% endif %}
                     </div>
                   </td>
                 </tr>
               {% empty %}
-                <tr><td colspan="4" class="text-muted">No persons found.</td></tr>
+                <tr><td colspan="4" class="text-muted">Chưa có đối tượng vào ra.</td></tr>
               {% endfor %}
             </tbody>
           </table>
@@ -244,16 +252,16 @@
       <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_accept' pk=object.pk %}" class="modal-content">
         {% csrf_token %}
         <div class="modal-header">
-          <h5 class="modal-title" id="accept-request-modal-label">Accept Access Request</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title" id="accept-request-modal-label">Chấp nhận phiếu yêu cầu</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
         </div>
         <div class="modal-body">
-          <label class="form-label" for="accept-description">Description</label>
+          <label class="form-label" for="accept-description">Mô tả</label>
           <textarea class="form-control" id="accept-description" name="description" rows="3"></textarea>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-success">Accept</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+          <button type="submit" class="btn btn-success">Chấp nhận</button>
         </div>
       </form>
     </div>
@@ -264,16 +272,16 @@
       <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_reject' pk=object.pk %}" class="modal-content">
         {% csrf_token %}
         <div class="modal-header">
-          <h5 class="modal-title" id="reject-request-modal-label">Reject Access Request</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title" id="reject-request-modal-label">Từ chối phiếu yêu cầu</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
         </div>
         <div class="modal-body">
-          <label class="form-label" for="reject-description">Reason</label>
+          <label class="form-label" for="reject-description">Lý do từ chối</label>
           <textarea class="form-control" id="reject-description" name="description" rows="3" required></textarea>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-danger">Reject</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+          <button type="submit" class="btn btn-danger">Từ chối</button>
         </div>
       </form>
     </div>
@@ -285,15 +293,15 @@
       <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequest_complete' pk=object.pk %}" class="modal-content">
         {% csrf_token %}
         <div class="modal-header">
-          <h5 class="modal-title" id="complete-request-modal-label">Complete Access Request</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title" id="complete-request-modal-label">Hoàn thành phiếu yêu cầu</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
         </div>
         <div class="modal-body">
-          Complete access request <strong>{{ object.name }}</strong>?
+          Bạn có muốn hoàn thành phiếu <strong>{{ object.name }}</strong>?
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-success">Complete</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+          <button type="submit" class="btn btn-success">Hoàn thành</button>
         </div>
       </form>
     </div>

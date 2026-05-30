@@ -6,10 +6,22 @@ from netbox.tables import NetBoxTable, columns
 from .mapping import get_warranty_state
 from .models import AccessRequest, AccessRequestPerson, AssetGroup, SmartLock
 from .permissions import is_access_request_admin
+from .ui import (
+    ACCESS_REQUEST_PERSON_ACCESS_LABELS,
+    ACCESS_REQUEST_PERSON_VERIFY_LABELS,
+    ACCESS_REQUEST_STATUS_LABELS,
+    ASSET_GROUP_STATUS_LABELS,
+    RACK_FACE_LABELS,
+    SMARTLOCK_STATUS_LABELS,
+    WARRANTY_STATE_LABELS,
+    label_for,
+)
 from .upload_files import file_names_for_object
 
 
 class GuestWorkflowActionsColumn(columns.ActionsColumn):
+    """Ẩn action CRUD theo workflow Guest/Admin nhưng vẫn để backend kiểm quyền thật sự."""
+
     def render(self, record, table, **kwargs):
         original_actions = self.actions
         try:
@@ -32,10 +44,16 @@ class GuestWorkflowActionsColumn(columns.ActionsColumn):
 
 
 class AssetGroupTable(NetBoxTable):
-    name = tables.Column(linkify=True)
-    status = columns.ChoiceFieldColumn()
-    uploaded_file_count = tables.Column(verbose_name="File Count", orderable=False)
+    name = tables.Column(linkify=True, verbose_name="Tên")
+    slug = tables.Column(verbose_name="Slug")
+    code = tables.Column(verbose_name="Mã")
+    status = tables.Column(verbose_name="Trạng thái")
+    description = tables.Column(verbose_name="Mô tả")
+    uploaded_file_count = tables.Column(verbose_name="Số file", orderable=False)
     tags = columns.TagColumn(url_name="plugins:netbox_smartlock:assetgroup_list")
+
+    def render_status(self, value):
+        return label_for(ASSET_GROUP_STATUS_LABELS, value)
 
     def render_uploaded_file_count(self, record):
         return getattr(record, "uploaded_file_count", 0)
@@ -51,19 +69,33 @@ class AssetGroupTable(NetBoxTable):
 
 
 class SmartLockTable(NetBoxTable):
-    name = tables.Column(linkify=True)
-    status = columns.ChoiceFieldColumn()
-    asset_group = tables.Column(linkify=True)
-    created_by_name = tables.Column(verbose_name="Created By", order_by=("created_by_name",))
-    region = tables.Column(linkify=True)
-    site = tables.Column(linkify=True)
-    location = tables.Column(linkify=True)
-    rack = tables.Column(linkify=True)
-    rack_face = tables.Column(verbose_name="Rack Face")
-    warranty_expiration_date = tables.DateColumn()
-    warranty_state = tables.Column(verbose_name="Warranty", accessor="warranty_expiration_date", orderable=False)
-    uploaded_file_count = tables.Column(verbose_name="File Count", orderable=False)
+    name = tables.Column(linkify=True, verbose_name="Tên")
+    code = tables.Column(verbose_name="Mã")
+    status = tables.Column(verbose_name="Trạng thái")
+    asset_group = tables.Column(linkify=True, verbose_name="Nhóm tài sản")
+    device_type = tables.Column(verbose_name="Loại thiết bị")
+    manufacturer = tables.Column(verbose_name="Nhà sản xuất")
+    model = tables.Column(verbose_name="Model")
+    serial = tables.Column(verbose_name="Serial")
+    created_by_name = tables.Column(verbose_name="Người tạo", order_by=("created_by_name",))
+    region = tables.Column(linkify=True, verbose_name="Khu vực")
+    site = tables.Column(linkify=True, verbose_name="Địa điểm")
+    location = tables.Column(linkify=True, verbose_name="Vị trí")
+    rack = tables.Column(linkify=True, verbose_name="Tủ rack")
+    rack_face = tables.Column(verbose_name="Mặt tủ rack")
+    setup_date = tables.DateColumn(verbose_name="Ngày lắp đặt")
+    bought_date = tables.DateColumn(verbose_name="Ngày mua")
+    warranty_period = tables.Column(verbose_name="Thời hạn bảo hành")
+    warranty_expiration_date = tables.DateColumn(verbose_name="Ngày hết hạn bảo hành")
+    warranty_state = tables.Column(verbose_name="Bảo hành", accessor="warranty_expiration_date", orderable=False)
+    uploaded_file_count = tables.Column(verbose_name="Số file", orderable=False)
     tags = columns.TagColumn(url_name="plugins:netbox_smartlock:smartlock_list")
+
+    def render_status(self, value):
+        return label_for(SMARTLOCK_STATUS_LABELS, value)
+
+    def render_rack_face(self, value):
+        return label_for(RACK_FACE_LABELS, value)
 
     def render_uploaded_file_count(self, record):
         return getattr(record, "uploaded_file_count", 0)
@@ -71,10 +103,10 @@ class SmartLockTable(NetBoxTable):
     def render_warranty_state(self, value, record):
         state = get_warranty_state(record.warranty_expiration_date)
         label_map = {
-            "valid": ("success", "Valid"),
-            "expiring": ("warning", "Expiring soon"),
-            "expired": ("danger", "Expired"),
-            "missing": ("secondary", "Not set"),
+            "valid": ("success", WARRANTY_STATE_LABELS["valid"]),
+            "expiring": ("warning", WARRANTY_STATE_LABELS["expiring"]),
+            "expired": ("danger", WARRANTY_STATE_LABELS["expired"]),
+            "missing": ("secondary", WARRANTY_STATE_LABELS["missing"]),
         }
         color, label = label_map[state]
         return format_html('<span class="badge text-bg-{}">{}</span>', color, label)
@@ -95,14 +127,19 @@ class SmartLockTable(NetBoxTable):
 
 
 class AccessRequestTable(NetBoxTable):
-    name = tables.Column(linkify=True)
-    status = columns.ChoiceFieldColumn()
-    region = tables.Column(linkify=True)
-    site = tables.Column(linkify=True)
-    created_by_name = tables.Column(verbose_name="Created By", order_by=("created_by_name",))
-    person_count = tables.Column(verbose_name="Persons", orderable=False)
+    name = tables.Column(linkify=True, verbose_name="Tên phiếu")
+    status = tables.Column(verbose_name="Trạng thái")
+    reason = tables.Column(verbose_name="Lý do")
+    expected_date = tables.DateColumn(verbose_name="Ngày dự kiến")
+    region = tables.Column(linkify=True, verbose_name="Khu vực")
+    site = tables.Column(linkify=True, verbose_name="Địa điểm")
+    created_by_name = tables.Column(verbose_name="Người tạo", order_by=("created_by_name",))
+    person_count = tables.Column(verbose_name="Số đối tượng", orderable=False)
     tags = columns.TagColumn(url_name="plugins:netbox_smartlock:accessrequest_list")
     actions = GuestWorkflowActionsColumn()
+
+    def render_status(self, value):
+        return label_for(ACCESS_REQUEST_STATUS_LABELS, value)
 
     def render_person_count(self, record):
         return getattr(record, "person_count", 0)
@@ -121,15 +158,26 @@ class AccessRequestTable(NetBoxTable):
 
 
 class AccessRequestPersonTable(NetBoxTable):
-    full_name = tables.Column(linkify=True)
-    request = tables.Column(linkify=True)
-    verify_status = columns.ChoiceFieldColumn()
-    access_status = columns.ChoiceFieldColumn()
-    location = tables.Column(linkify=True)
-    uploaded_file_count = tables.Column(verbose_name="Files", orderable=False)
-    uploaded_file_names = tables.Column(verbose_name="Attachment Files", orderable=False, empty_values=())
+    full_name = tables.Column(linkify=True, verbose_name="Họ tên")
+    request = tables.Column(linkify=True, verbose_name="Phiếu yêu cầu")
+    identity_code = tables.Column(verbose_name="CCCD/CMND")
+    organization = tables.Column(verbose_name="Đơn vị")
+    title = tables.Column(verbose_name="Chức danh")
+    phone = tables.Column(verbose_name="Số điện thoại")
+    verify_status = tables.Column(verbose_name="Xác minh")
+    access_status = tables.Column(verbose_name="Trạng thái vào ra")
+    location = tables.Column(linkify=True, verbose_name="Vị trí")
+    description = tables.Column(verbose_name="Mô tả")
+    uploaded_file_count = tables.Column(verbose_name="Số file", orderable=False)
+    uploaded_file_names = tables.Column(verbose_name="File đính kèm", orderable=False, empty_values=())
     tags = columns.TagColumn(url_name="plugins:netbox_smartlock:accessrequestperson_list")
     actions = GuestWorkflowActionsColumn()
+
+    def render_verify_status(self, value):
+        return label_for(ACCESS_REQUEST_PERSON_VERIFY_LABELS, value)
+
+    def render_access_status(self, value):
+        return label_for(ACCESS_REQUEST_PERSON_ACCESS_LABELS, value)
 
     def render_uploaded_file_count(self, record):
         return getattr(record, "uploaded_file_count", 0)

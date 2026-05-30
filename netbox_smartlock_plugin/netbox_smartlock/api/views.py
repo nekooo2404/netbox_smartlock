@@ -1,6 +1,5 @@
 from netbox.api.viewsets import NetBoxModelViewSet
 from django.core.exceptions import ValidationError as DjangoValidationError
-from rest_framework import serializers
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
@@ -8,6 +7,14 @@ from rest_framework.response import Response
 
 from ..models import AccessRequest, AccessRequestPerson, AssetGroup, SmartLock
 from ..filtersets import AccessRequestFilterSet, AccessRequestPersonFilterSet, AssetGroupFilterSet, SmartLockFilterSet
+from ..messages import (
+    ACCESS_REQUEST_ADMIN_CRUD_MESSAGE,
+    ACCESS_REQUEST_GUEST_DELETE_DENIED_MESSAGE,
+    ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE,
+    ACCESS_REQUEST_PERSON_DELETE_DENIED_MESSAGE,
+    ACCESS_REQUEST_PERSON_WORKFLOW_PERMISSION_MESSAGE,
+    ACCESS_REQUEST_WORKFLOW_PERMISSION_MESSAGE,
+)
 from ..permissions import (
     can_manage_access_request_persons,
     can_manage_access_requests,
@@ -15,17 +22,49 @@ from ..permissions import (
     restrict_access_request_persons_for_user,
     restrict_access_requests_for_user,
 )
+from .errors import raise_serializer_validation_error
 from .serializers import AccessRequestPersonSerializer, AccessRequestSerializer, AssetGroupSerializer, SmartLockSerializer
 
 
-def _raise_drf_validation_error(exc):
-    if hasattr(exc, "message_dict"):
-        raise serializers.ValidationError(exc.message_dict)
-    raise serializers.ValidationError(exc.messages)
+class AdminCrudGuardMixin:
+    """Chặn Admin dùng CRUD API thường cho các model phải đi qua workflow nghiệp vụ."""
+
+    admin_crud_message = ""
+
+    def enforce_guest_crud_access(self):
+        if is_access_request_admin(self.request.user):
+            raise PermissionDenied(self.admin_crud_message)
+
+    def create(self, request, *args, **kwargs):
+        self.enforce_guest_crud_access()
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        self.enforce_guest_crud_access()
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        self.enforce_guest_crud_access()
+        return super().partial_update(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        self.enforce_guest_crud_access()
+        return super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        self.enforce_guest_crud_access()
+        return super().perform_update(serializer)
+
+    def perform_destroy(self, instance):
+        self.enforce_guest_crud_access()
+        return super().perform_destroy(instance)
 
 
 class AccessRequestAdminActionMixin:
+    """Mở quyền POST workflow, sau đó scope queryset theo quyền change object của NetBox."""
+
     admin_permission_checker = staticmethod(can_manage_access_requests)
+    workflow_permission_message = ACCESS_REQUEST_WORKFLOW_PERMISSION_MESSAGE
     workflow_actions = ()
 
     def is_workflow_action(self):
@@ -43,7 +82,7 @@ class AccessRequestAdminActionMixin:
 
     def require_access_request_admin(self):
         if not self.admin_permission_checker(self.request.user):
-            raise PermissionDenied("Only Admin users with NetBox change permission can perform this access request action.")
+            raise PermissionDenied(self.workflow_permission_message)
 
     def run_workflow_action(self, instance, action_name):
         self.require_access_request_admin()
@@ -51,54 +90,33 @@ class AccessRequestAdminActionMixin:
         try:
             getattr(instance, action_name)(user=self.request.user, description=description)
         except DjangoValidationError as exc:
-            _raise_drf_validation_error(exc)
+            raise_serializer_validation_error(exc)
         instance.refresh_from_db()
         return Response(self.get_serializer(instance).data)
 
 
-class AccessRequestViewSet(AccessRequestAdminActionMixin, NetBoxModelViewSet):
+class AccessRequestViewSet(AdminCrudGuardMixin, AccessRequestAdminActionMixin, NetBoxModelViewSet):
+    admin_crud_message = ACCESS_REQUEST_ADMIN_CRUD_MESSAGE
     workflow_actions = ("confirm", "accept", "reject", "complete")
     queryset = AccessRequest.objects.select_related("region", "site").prefetch_related("tags")
     serializer_class = AccessRequestSerializer
     filterset_class = AccessRequestFilterSet
 
-    def create(self, request, *args, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
-        return super().create(request, *args, **kwargs)
-
-    def update(self, request, *args, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
-        return super().update(request, *args, **kwargs)
-
-    def partial_update(self, request, *args, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
-        return super().partial_update(request, *args, **kwargs)
-
     def get_queryset(self):
         return restrict_access_requests_for_user(super().get_queryset(), self.request.user)
 
     def perform_create(self, serializer):
-        if is_access_request_admin(self.request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
+        self.enforce_guest_crud_access()
         if not serializer.instance and self.request.user.is_authenticated:
             serializer.save(created_by=self.request.user)
             self._validate_objects(serializer.instance)
             return
         return super().perform_create(serializer)
 
-    def perform_update(self, serializer):
-        if is_access_request_admin(self.request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
-        return super().perform_update(serializer)
-
     def perform_destroy(self, instance):
-        if is_access_request_admin(self.request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request CRUD.")
+        self.enforce_guest_crud_access()
         if not instance.can_guest_delete:
-            raise PermissionDenied("Accepted or completed access requests cannot be deleted.")
+            raise PermissionDenied(ACCESS_REQUEST_GUEST_DELETE_DENIED_MESSAGE)
         return super().perform_destroy(instance)
 
     @action(detail=True, methods=["post"])
@@ -122,46 +140,22 @@ class AccessRequestViewSet(AccessRequestAdminActionMixin, NetBoxModelViewSet):
         return self.run_workflow_action(self.get_object(), "complete")
 
 
-class AccessRequestPersonViewSet(AccessRequestAdminActionMixin, NetBoxModelViewSet):
+class AccessRequestPersonViewSet(AdminCrudGuardMixin, AccessRequestAdminActionMixin, NetBoxModelViewSet):
+    admin_crud_message = ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE
     admin_permission_checker = staticmethod(can_manage_access_request_persons)
-    workflow_actions = ("verify_valid", "verify_invalid", "check_in", "check_out")
+    workflow_permission_message = ACCESS_REQUEST_PERSON_WORKFLOW_PERMISSION_MESSAGE
+    workflow_actions = ("verify_valid", "verify_invalid", "in_", "out")
     queryset = AccessRequestPerson.objects.select_related("request", "location").prefetch_related("tags")
     serializer_class = AccessRequestPersonSerializer
     filterset_class = AccessRequestPersonFilterSet
 
-    def create(self, request, *args, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
-        return super().create(request, *args, **kwargs)
-
-    def update(self, request, *args, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
-        return super().update(request, *args, **kwargs)
-
-    def partial_update(self, request, *args, **kwargs):
-        if is_access_request_admin(request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
-        return super().partial_update(request, *args, **kwargs)
-
     def get_queryset(self):
         return restrict_access_request_persons_for_user(super().get_queryset(), self.request.user)
 
-    def perform_create(self, serializer):
-        if is_access_request_admin(self.request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
-        return super().perform_create(serializer)
-
-    def perform_update(self, serializer):
-        if is_access_request_admin(self.request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
-        return super().perform_update(serializer)
-
     def perform_destroy(self, instance):
-        if is_access_request_admin(self.request.user):
-            raise PermissionDenied("Admin users must use workflow actions instead of generic access request person CRUD.")
+        self.enforce_guest_crud_access()
         if not instance.can_guest_delete:
-            raise PermissionDenied("This access request person cannot be deleted in the current workflow state.")
+            raise PermissionDenied(ACCESS_REQUEST_PERSON_DELETE_DENIED_MESSAGE)
         return super().perform_destroy(instance)
 
     @action(detail=True, methods=["post"], url_path="verify-valid")
@@ -174,15 +168,15 @@ class AccessRequestPersonViewSet(AccessRequestAdminActionMixin, NetBoxModelViewS
         self.require_access_request_admin()
         return self.run_workflow_action(self.get_object(), "mark_invalid")
 
-    @action(detail=True, methods=["post"], url_path="check-in")
-    def check_in(self, request, pk=None):
+    @action(detail=True, methods=["post"], url_path="in", url_name="in")
+    def in_(self, request, pk=None):
         self.require_access_request_admin()
-        return self.run_workflow_action(self.get_object(), "check_in")
+        return self.run_workflow_action(self.get_object(), "mark_in")
 
-    @action(detail=True, methods=["post"], url_path="check-out")
-    def check_out(self, request, pk=None):
+    @action(detail=True, methods=["post"], url_path="out")
+    def out(self, request, pk=None):
         self.require_access_request_admin()
-        return self.run_workflow_action(self.get_object(), "check_out")
+        return self.run_workflow_action(self.get_object(), "mark_out")
 
 
 class AssetGroupViewSet(NetBoxModelViewSet):

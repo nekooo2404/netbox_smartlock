@@ -9,6 +9,15 @@ from netbox.filtersets import NetBoxModelFilterSet
 
 from .mapping import WARRANTY_STATE_EXPIRED, WARRANTY_STATE_EXPIRING, WARRANTY_STATE_MISSING, WARRANTY_STATE_VALID
 from .models import AccessRequest, AccessRequestPerson, AssetGroup, SmartLock
+from .ui import (
+    ACCESS_REQUEST_PERSON_ACCESS_LABELS,
+    ACCESS_REQUEST_PERSON_VERIFY_LABELS,
+    ACCESS_REQUEST_STATUS_LABELS,
+    RACK_FACE_LABELS,
+    SMARTLOCK_STATUS_LABELS,
+    WARRANTY_STATE_LABELS,
+    choices_with_labels,
+)
 
 
 class AssetGroupFilterSet(NetBoxModelFilterSet):
@@ -22,32 +31,32 @@ class AssetGroupFilterSet(NetBoxModelFilterSet):
 
 class SmartLockFilterSet(NetBoxModelFilterSet):
     status = django_filters.MultipleChoiceFilter(
-        choices=SmartLock.STATUS_CHOICES,
-        label="Status",
+        choices=choices_with_labels(SmartLock.STATUS_CHOICES, SMARTLOCK_STATUS_LABELS),
+        label="Trạng thái",
     )
     asset_group_id = django_filters.ModelMultipleChoiceFilter(
         queryset=AssetGroup.objects.all(),
-        label="Asset Group",
+        label="Nhóm tài sản",
     )
     region_id = django_filters.ModelMultipleChoiceFilter(
         queryset=Region.objects.all(),
-        label="Region",
+        label="Khu vực",
     )
     site_id = django_filters.ModelMultipleChoiceFilter(
         queryset=Site.objects.all(),
-        label="Site",
+        label="Địa điểm",
     )
     location_id = django_filters.ModelMultipleChoiceFilter(
         queryset=Location.objects.all(),
-        label="Location",
+        label="Vị trí",
     )
     rack_id = django_filters.ModelMultipleChoiceFilter(
         queryset=Rack.objects.all(),
-        label="Rack",
+        label="Tủ rack",
     )
     rack_face = django_filters.MultipleChoiceFilter(
-        choices=SmartLock.RACK_FACE_CHOICES,
-        label="Rack Face",
+        choices=choices_with_labels(SmartLock.RACK_FACE_CHOICES, RACK_FACE_LABELS),
+        label="Mặt tủ rack",
     )
     device_model = django_filters.CharFilter(
         field_name="model",
@@ -56,13 +65,13 @@ class SmartLockFilterSet(NetBoxModelFilterSet):
     )
     warranty_state = django_filters.MultipleChoiceFilter(
         choices=(
-            (WARRANTY_STATE_VALID, "Valid"),
-            (WARRANTY_STATE_EXPIRING, "Expiring soon"),
-            (WARRANTY_STATE_EXPIRED, "Expired"),
-            (WARRANTY_STATE_MISSING, "Not set"),
+            (WARRANTY_STATE_VALID, WARRANTY_STATE_LABELS[WARRANTY_STATE_VALID]),
+            (WARRANTY_STATE_EXPIRING, WARRANTY_STATE_LABELS[WARRANTY_STATE_EXPIRING]),
+            (WARRANTY_STATE_EXPIRED, WARRANTY_STATE_LABELS[WARRANTY_STATE_EXPIRED]),
+            (WARRANTY_STATE_MISSING, WARRANTY_STATE_LABELS[WARRANTY_STATE_MISSING]),
         ),
         method="filter_warranty_state",
-        label="Warranty State",
+        label="Trạng thái bảo hành",
     )
 
     class Meta:
@@ -111,16 +120,16 @@ class SmartLockFilterSet(NetBoxModelFilterSet):
 
 class AccessRequestFilterSet(NetBoxModelFilterSet):
     status = django_filters.MultipleChoiceFilter(
-        choices=AccessRequest.STATUS_CHOICES,
-        label="Status",
+        choices=choices_with_labels(AccessRequest.STATUS_CHOICES, ACCESS_REQUEST_STATUS_LABELS),
+        label="Trạng thái",
     )
     region_id = django_filters.ModelMultipleChoiceFilter(
         queryset=Region.objects.all(),
-        label="Region",
+        label="Khu vực",
     )
     site_id = django_filters.ModelMultipleChoiceFilter(
         queryset=Site.objects.all(),
-        label="Site",
+        label="Địa điểm",
     )
 
     class Meta:
@@ -140,19 +149,19 @@ class AccessRequestFilterSet(NetBoxModelFilterSet):
 class AccessRequestPersonFilterSet(NetBoxModelFilterSet):
     request_id = django_filters.ModelMultipleChoiceFilter(
         queryset=AccessRequest.objects.all(),
-        label="Access Request",
+        label="Phiếu yêu cầu vào ra",
     )
     verify_status = django_filters.MultipleChoiceFilter(
-        choices=AccessRequestPerson.VERIFY_STATUS_CHOICES,
-        label="Verification Status",
+        choices=choices_with_labels(AccessRequestPerson.VERIFY_STATUS_CHOICES, ACCESS_REQUEST_PERSON_VERIFY_LABELS),
+        label="Trạng thái xác minh",
     )
     access_status = django_filters.MultipleChoiceFilter(
-        choices=AccessRequestPerson.ACCESS_STATUS_CHOICES,
-        label="Access Status",
+        choices=choices_with_labels(AccessRequestPerson.ACCESS_STATUS_CHOICES, ACCESS_REQUEST_PERSON_ACCESS_LABELS),
+        label="Trạng thái vào ra",
     )
     location_id = django_filters.ModelMultipleChoiceFilter(
         queryset=Location.objects.all(),
-        label="Location",
+        label="Vị trí",
     )
 
     class Meta:

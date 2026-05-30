@@ -1,5 +1,4 @@
 import json
-import json
 import logging
 import os
 import uuid
@@ -22,6 +21,7 @@ MAX_UPLOAD_FILE_SIZE = 25 * 1024 * 1024
 
 
 def is_relative_to(path, parent):
+    """Backport nhỏ cho Path.relative_to dạng boolean, dùng để chặn path traversal."""
     try:
         path.relative_to(parent)
     except ValueError:
@@ -30,6 +30,7 @@ def is_relative_to(path, parent):
 
 
 def get_uploaded_files(instance, model_name=None):
+    """Lấy file theo model_name/object_id vì plugin dùng được cho nhiều model khác nhau."""
     if not instance or not instance.pk:
         return UploadedFile.objects.none()
 
@@ -40,6 +41,7 @@ def get_uploaded_files(instance, model_name=None):
 
 
 def serialize_uploaded_file(file_obj):
+    """Chuẩn hóa metadata file để widget upload có thể render lại file đã lưu."""
     try:
         size = file_obj.file.size
     except (OSError, ValueError):
@@ -56,6 +58,7 @@ def serialize_uploaded_file(file_obj):
 
 
 def safe_delete_uploaded_file(file_obj):
+    """Xóa cả file storage và record DB, vẫn dọn DB nếu storage delete lỗi."""
     try:
         storage_name = file_obj.file.name
         if storage_name:
@@ -78,6 +81,7 @@ def is_allowed_size(file_size):
 
 
 def resolve_temp_upload_path(raw_path):
+    """Chỉ resolve file nằm trong MEDIA_ROOT/uploads/tmp để tránh xóa/đọc ngoài vùng tạm."""
     if not raw_path:
         return None
 
@@ -103,17 +107,22 @@ def resolve_temp_upload_path(raw_path):
 
 @dataclass(frozen=True)
 class PendingUpload:
+    """File tạm đã qua validate và chờ chuyển sang thư mục upload chính."""
+
     file_name: str
     temp_path: Path
 
 
 class AttachmentSyncService:
+    """Đồng bộ JSON từ widget thành UploadedFile thật của object đã lưu."""
+
     def __init__(self, instance, *, model_name=None):
         self.instance = instance
         self.model_name = model_name or instance._meta.model_name
         self.content_type = ContentType.objects.get_for_model(instance, for_concrete_model=False)
 
     def sync_from_json(self, all_files_json):
+        """Giữ file cũ còn trong payload, xóa file bị bỏ, và persist file tạm mới."""
         if not self.instance or not self.instance.pk:
             return
 
@@ -148,6 +157,7 @@ class AttachmentSyncService:
         return files
 
     def _classify_payload(self, files, existing_by_id):
+        """Tách payload thành file cũ cần giữ và file tạm cần persist."""
         retained_ids = set()
         pending_uploads = []
 
@@ -176,6 +186,7 @@ class AttachmentSyncService:
             return None
 
     def _build_pending_upload(self, item):
+        """Validate extension, path tạm và dung lượng trước khi persist file."""
         file_name = item.get("file_name") or item.get("name")
         raw_path = item.get("path") or ""
 
@@ -215,6 +226,7 @@ class AttachmentSyncService:
                 safe_delete_uploaded_file(file_obj)
 
     def _persist_pending_uploads(self, pending_uploads):
+        """Lưu file bằng tên UUID để tránh đè file và xóa bản tạm sau khi lưu thành công."""
         upload_subdir = f"uploads/{self.model_name}"
 
         for pending in pending_uploads:

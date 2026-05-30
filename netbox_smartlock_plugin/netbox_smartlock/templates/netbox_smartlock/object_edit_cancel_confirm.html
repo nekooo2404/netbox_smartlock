@@ -1,20 +1,38 @@
 {% extends 'generic/object_edit.html' %}
 
+{% block title %}
+  {% if object.pk %}
+    Chỉnh sửa {{ smartlock_model_label }} {{ object }}
+  {% else %}
+    Thêm {{ smartlock_model_label }}
+  {% endif %}
+{% endblock title %}
+
+{% block tabs %}
+  <ul class="nav nav-tabs">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="edit-form-tab" data-bs-toggle="tab" data-bs-target="#edit-form" type="button" role="tab" aria-controls="edit-form" aria-selected="true">
+        {% if object.pk %}Chỉnh sửa{% else %}Tạo mới{% endif %}
+      </button>
+    </li>
+  </ul>
+{% endblock tabs %}
+
 {% block buttons %}
   <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#smartlock-cancel-confirm-modal" data-smartlock-cancel-confirm>
-    Cancel
+    Hủy
   </button>
   {% if object.pk %}
     <button type="submit" name="_update" class="btn btn-primary">
-      Save
+      Lưu
     </button>
   {% else %}
-    <div class="btn-group" role="group" aria-label="Actions">
+    <div class="btn-group" role="group" aria-label="Thao tác">
       <button type="submit" name="_create" class="btn btn-primary">
-        Create
+        Tạo
       </button>
       <button type="submit" name="_addanother" class="btn btn-outline-primary">
-        Create & Add Another
+        Tạo và thêm tiếp
       </button>
     </div>
   {% endif %}
@@ -26,15 +44,15 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="smartlock-cancel-confirm-modal-label">Cancel changes?</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title" id="smartlock-cancel-confirm-modal-label">Hủy thay đổi?</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
         </div>
         <div class="modal-body">
-          Unsaved changes on this form will be discarded.
+          Các thay đổi chưa lưu trên form này sẽ bị hủy.
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Continue Editing</button>
-          <a href="{{ return_url }}" class="btn btn-danger">Discard Changes</a>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tiếp tục chỉnh sửa</button>
+          <a href="{{ return_url }}" class="btn btn-danger">Hủy thay đổi</a>
         </div>
       </div>
     </div>

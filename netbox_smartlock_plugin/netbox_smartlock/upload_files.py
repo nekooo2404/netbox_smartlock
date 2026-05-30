@@ -25,6 +25,7 @@ def file_count_for_object(instance, model_name=None):
 
 
 def upload_payload_has_valid_file(upload_files, instance=None, model_name=None):
+    """Xác nhận payload upload có file ảnh hợp lệ hoặc đang giữ file cũ của object."""
     if isinstance(upload_files, str):
         try:
             payload = json.loads(upload_files or "[]")
@@ -50,6 +51,7 @@ def upload_payload_has_valid_file(upload_files, instance=None, model_name=None):
         if file_id and file_id in existing_file_ids:
             return True
 
+        # File mới vẫn còn ở vùng tạm; chỉ chấp nhận nếu resolve được path an toàn từ upload plugin.
         file_name = item.get("file_name") or item.get("name")
         temp_path = resolve_temp_upload_path(item.get("path") or "")
         if not (file_name and temp_path and is_allowed_image(file_name)):
@@ -65,6 +67,7 @@ def upload_payload_has_valid_file(upload_files, instance=None, model_name=None):
 
 
 def annotate_file_count(queryset, model_name, alias="uploaded_file_count"):
+    """Annotate số file bằng subquery để list view không phải count từng dòng."""
     file_count = (
         UploadedFile.objects.filter(model_name=model_name, object_id=OuterRef("pk"))
         .values("object_id")
@@ -82,6 +85,7 @@ def annotate_file_count(queryset, model_name, alias="uploaded_file_count"):
 
 
 def file_names_by_object_ids(object_ids, model_name):
+    """Lấy tên file theo object theo batch, dùng cho export để tránh N+1 query."""
     names_by_id = defaultdict(list)
     if not object_ids:
         return names_by_id

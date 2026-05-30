@@ -8,8 +8,12 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.tox/
+.nox/
+.hypothesis/
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 
 # Virtual environments (anchor to repo root so netbox-docker/env/ is not ignored on Windows)
@@ -21,6 +25,7 @@ venv/
 # Django
 db.sqlite3
 *.sqlite3
+/media/
 media/
 staticfiles/
 local_settings.py
@@ -43,10 +48,15 @@ netbox-docker/env/*
 .cursorrules
 *.swp
 *.swo
+*.tmp
+*.bak
+*.orig
+*.rej
 
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Build / packaging
 build/
@@ -62,6 +72,9 @@ logs/
 # Docker / local runtime artifacts
 netbox-docker/.env
 netbox-docker/env/*.local
+netbox-docker/media/
+netbox-docker/staticfiles/
+netbox-docker/reports/
 
 # Local exports / reports
 *.xls

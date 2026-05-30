@@ -7,6 +7,8 @@ from ..utils import get_serialized_uploaded_files_for_objects
 
 
 class GetFileFromDBAPIView(APIView):
+    """API phụ cho widget lấy metadata file của nhiều object trong một request."""
+
     permission_classes = [IsAuthenticated]
     queryset = UploadedFile.objects.none()
 

@@ -11,7 +11,15 @@ from .contracts import (
     SMARTLOCK_IMPORT_FIELD_NAMES,
 )
 from .mapping import format_rack_lookup, get_warranty_state
+from .ui import WARRANTY_STATE_LABELS, label_for
 from .upload_files import file_names_by_object_ids
+
+
+SMARTLOCK_EXCEL_EXTRA_LABELS = {
+    "rack_lookup": "Tra cứu tủ rack",
+    "warranty_state": "Trạng thái bảo hành",
+    "uploaded_files": "File đính kèm",
+}
 
 
 class SmartLockExportService:
@@ -35,6 +43,7 @@ class SmartLockExportService:
 
     @classmethod
     def dispatch_custom_export(cls, request, *, view, queryset):
+        """Chỉ xử lý export Excel bổ sung; export CSV lõi vẫn đi theo cơ chế NetBox."""
         export_type = request.GET.get(SMARTLOCK_CUSTOM_EXPORT_PARAM)
 
         if export_type == SMARTLOCK_EXPORT_EXCEL_REPORT:
@@ -92,6 +101,7 @@ class SmartLockExportService:
         from openpyxl import Workbook
         from openpyxl.styles import Font
 
+        # Excel report bổ sung các cột tính toán, còn CSV giữ đúng contract import/export.
         exclude_columns = cls._excluded_excel_columns(table, columns=columns)
         records = list(table.data)
         rows = list(table.as_values(exclude_columns=exclude_columns))
@@ -99,19 +109,19 @@ class SmartLockExportService:
         uploaded_file_names = file_names_by_object_ids(object_ids, model_name="smartlock")
 
         if rows:
-            rows[0] = [*rows[0], *SMARTLOCK_EXCEL_EXTRA_FIELDS]
+            rows[0] = [*rows[0], *[SMARTLOCK_EXCEL_EXTRA_LABELS[field] for field in SMARTLOCK_EXCEL_EXTRA_FIELDS]]
             for index, record in enumerate(records, start=1):
                 names = uploaded_file_names.get(record.pk, [])
                 rows[index] = [
                     *rows[index],
                     format_rack_lookup(record.rack),
-                    get_warranty_state(record.warranty_expiration_date),
+                    label_for(WARRANTY_STATE_LABELS, get_warranty_state(record.warranty_expiration_date)),
                     ", ".join(names),
                 ]
 
         workbook = Workbook()
         worksheet = workbook.active
-        worksheet.title = "SmartLocks"
+        worksheet.title = "Khóa thông minh"
 
         for row_index, row in enumerate(rows, start=1):
             worksheet.append(["" if value is None else str(value) for value in row])
@@ -176,12 +186,13 @@ class AccessRequestExportService:
         from openpyxl import Workbook
         from openpyxl.styles import Font
 
+        # Queryset truyền vào đã được scope theo quyền, nên export không tự mở rộng dữ liệu.
         exclude_columns = cls._excluded_excel_columns(table, columns=columns)
         rows = list(table.as_values(exclude_columns=exclude_columns))
 
         workbook = Workbook()
         worksheet = workbook.active
-        worksheet.title = "Access Requests"
+        worksheet.title = "Phiếu yêu cầu"
 
         for row_index, row in enumerate(rows, start=1):
             worksheet.append(["" if value is None else str(value) for value in row])

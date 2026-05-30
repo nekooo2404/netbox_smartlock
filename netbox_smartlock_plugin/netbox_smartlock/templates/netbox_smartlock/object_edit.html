@@ -1,0 +1,37 @@
+{% extends 'generic/object_edit.html' %}
+
+{% block title %}
+  {% if object.pk %}
+    Chỉnh sửa {{ smartlock_model_label }} {{ object }}
+  {% else %}
+    Thêm {{ smartlock_model_label }}
+  {% endif %}
+{% endblock title %}
+
+{% block tabs %}
+  <ul class="nav nav-tabs">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="edit-form-tab" data-bs-toggle="tab" data-bs-target="#edit-form" type="button" role="tab" aria-controls="edit-form" aria-selected="true">
+        {% if object.pk %}Chỉnh sửa{% else %}Tạo mới{% endif %}
+      </button>
+    </li>
+  </ul>
+{% endblock tabs %}
+
+{% block buttons %}
+  <a href="{{ return_url }}" class="btn btn-outline-secondary">Hủy</a>
+  {% if object.pk %}
+    <button type="submit" name="_update" class="btn btn-primary">
+      Lưu
+    </button>
+  {% else %}
+    <div class="btn-group" role="group" aria-label="Thao tác">
+      <button type="submit" name="_create" class="btn btn-primary">
+        Tạo
+      </button>
+      <button type="submit" name="_addanother" class="btn btn-outline-primary">
+        Tạo và thêm tiếp
+      </button>
+    </div>
+  {% endif %}
+{% endblock buttons %}

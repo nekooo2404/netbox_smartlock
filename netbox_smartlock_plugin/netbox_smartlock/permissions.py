@@ -2,6 +2,7 @@ from django.db.models import Q
 
 
 def is_access_request_admin(user):
+    """Admin SmartLock là superuser hoặc thành viên nhóm Admin của NetBox."""
     return bool(
         user
         and user.is_authenticated
@@ -27,6 +28,7 @@ def can_manage_access_request_persons(user):
 
 
 def can_manage_access_request(user, access_request):
+    """Kiểm tra quyền change trên đúng object phiếu, không chỉ quyền model-level."""
     return bool(
         access_request is not None
         and can_manage_access_requests(user)
@@ -35,6 +37,7 @@ def can_manage_access_request(user, access_request):
 
 
 def can_manage_access_request_person(user, access_request_person):
+    """Kiểm tra quyền change trên đúng object đối tượng vào ra."""
     return bool(
         access_request_person is not None
         and can_manage_access_request_persons(user)
@@ -43,6 +46,7 @@ def can_manage_access_request_person(user, access_request_person):
 
 
 def can_submit_access_request(user, access_request):
+    """Guest chỉ được gửi phiếu của chính mình khi có quyền change object đó."""
     return bool(
         access_request is not None
         and not is_access_request_admin(user)
@@ -52,6 +56,7 @@ def can_submit_access_request(user, access_request):
 
 
 def access_request_scope_q(user):
+    """Scope list/export: Admin thấy toàn bộ, Guest chỉ thấy phiếu do mình tạo."""
     if is_access_request_admin(user):
         return Q()
     if not user or not user.is_authenticated:
@@ -76,6 +81,7 @@ def restrict_access_requests_for_user(queryset, user):
 
 
 def restrict_access_request_persons_for_user(queryset, user):
+    """Áp scope người trong phiếu theo cùng phạm vi nhìn thấy phiếu yêu cầu."""
     if is_access_request_admin(user):
         return queryset
     if not user or not user.is_authenticated:

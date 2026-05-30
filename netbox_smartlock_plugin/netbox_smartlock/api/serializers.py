@@ -5,13 +5,21 @@ from dcim.api.serializers import LocationSerializer, RackSerializer, RegionSeria
 from dcim.models import Location, Rack, Region, Site
 from upload_file_plugin.services import sync_uploaded_files
 
+from ..messages import (
+    ACCESS_REQUEST_EDIT_LOCKED_MESSAGE,
+    ACCESS_REQUEST_PERSON_EDIT_LOCKED_MESSAGE,
+    ACCESS_REQUEST_PERSON_FILE_REQUIRED_MESSAGE,
+    ACCESS_REQUEST_PERSON_SCOPE_DENIED_MESSAGE,
+)
 from ..models import AccessRequest, AccessRequestPerson, AssetGroup, SmartLock
 from ..permissions import restrict_access_requests_for_user, user_can_access_request
 from ..services import normalize_smartlock_api_data
 from ..upload_files import files_for_object, upload_payload_has_valid_file
+from .errors import raise_serializer_validation_error
 
 
 def restrict_dcim_serializer_fields(fields, user, action="view"):
+    """Áp object permission của NetBox lên các field DCIM trong API serializer."""
     if user is None:
         return
 
@@ -70,11 +78,10 @@ class SmartLockSerializer(NetBoxModelSerializer):
     def validate(self, attrs):
         attrs = super().validate(attrs)
         try:
+            # Serializer validate trên candidate để partial update không làm lệch object đang có.
             return normalize_smartlock_api_data(self.instance, attrs)
         except DjangoValidationError as exc:
-            if hasattr(exc, "message_dict"):
-                raise serializers.ValidationError(exc.message_dict)
-            raise serializers.ValidationError(exc.messages)
+            raise_serializer_validation_error(exc)
 
 
 class AccessRequestSerializer(NetBoxModelSerializer):
@@ -114,18 +121,14 @@ class AccessRequestSerializer(NetBoxModelSerializer):
     def validate(self, attrs):
         attrs = super().validate(attrs)
         if self.instance and not self.instance.can_guest_edit:
-            raise serializers.ValidationError(
-                {"status": "Accepted or completed access requests cannot be edited."}
-            )
+            raise serializers.ValidationError({"status": ACCESS_REQUEST_EDIT_LOCKED_MESSAGE})
         instance = self.instance or AccessRequest()
         for key, value in attrs.items():
             setattr(instance, key, value)
         try:
             instance.clean()
         except DjangoValidationError as exc:
-            if hasattr(exc, "message_dict"):
-                raise serializers.ValidationError(exc.message_dict)
-            raise serializers.ValidationError(exc.messages)
+            raise_serializer_validation_error(exc)
         return attrs
 
 
@@ -173,57 +176,65 @@ class AccessRequestPersonSerializer(NetBoxModelSerializer):
         upload_files = attrs.pop("upload_files", serializers.empty)
         attrs = super().validate(attrs)
         self._upload_files_payload = None if upload_files is serializers.empty else upload_files
+        instance = self.build_validation_instance(attrs)
+        self.validate_request_scope(instance)
+        self.validate_upload_requirement(attrs, upload_files)
+        try:
+            instance.clean()
+        except DjangoValidationError as exc:
+            raise_serializer_validation_error(exc)
+        return attrs
+
+    def build_validation_instance(self, attrs):
+        instance = self.instance or AccessRequestPerson()
+        for key, value in attrs.items():
+            setattr(instance, key, value)
+        return instance
+
+    def validate_request_scope(self, instance):
+        access_request = getattr(instance, "request", None)
+        request = self.context.get("request")
+        request_user = getattr(request, "user", None)
+        if request_user is not None and access_request and not user_can_access_request(request_user, access_request):
+            raise serializers.ValidationError({"request": ACCESS_REQUEST_PERSON_SCOPE_DENIED_MESSAGE})
+        if access_request and not access_request.can_guest_edit:
+            raise serializers.ValidationError({"request": ACCESS_REQUEST_PERSON_EDIT_LOCKED_MESSAGE})
+
+    def validate_upload_requirement(self, attrs, upload_files):
+        # PATCH không đổi gì vẫn hợp lệ nếu object đã có file; create/update nội dung thì bắt buộc có file.
         enforce_attachment = not self.instance or bool(attrs) or upload_files is not serializers.empty
-        has_existing_files = bool(
+        if not enforce_attachment:
+            return
+
+        if upload_files is serializers.empty:
+            if not self.has_existing_upload_files():
+                raise serializers.ValidationError({"upload_files": ACCESS_REQUEST_PERSON_FILE_REQUIRED_MESSAGE})
+            return
+
+        if not upload_payload_has_valid_file(
+            upload_files,
+            instance=self.instance,
+            model_name="accessrequestperson",
+        ):
+            raise serializers.ValidationError({"upload_files": ACCESS_REQUEST_PERSON_FILE_REQUIRED_MESSAGE})
+
+    def has_existing_upload_files(self):
+        return bool(
             self.instance
             and self.instance.pk
             and files_for_object(self.instance, model_name="accessrequestperson").exists()
         )
 
-        instance = self.instance or AccessRequestPerson()
-        for key, value in attrs.items():
-            setattr(instance, key, value)
-        access_request = getattr(instance, "request", None)
-        request = self.context.get("request")
-        request_user = getattr(request, "user", None)
-        if request_user is not None and access_request and not user_can_access_request(request_user, access_request):
-            raise serializers.ValidationError(
-                {"request": "You do not have permission to add persons to this access request."}
-            )
-        if access_request and not access_request.can_guest_edit:
-            raise serializers.ValidationError(
-                {"request": "Persons cannot be added or edited after an access request is accepted or completed."}
-            )
-        if enforce_attachment:
-            if upload_files is serializers.empty:
-                if not has_existing_files:
-                    raise serializers.ValidationError(
-                        {"upload_files": "At least one attachment is required."}
-                    )
-            elif not upload_payload_has_valid_file(
-                upload_files,
-                instance=self.instance,
-                model_name="accessrequestperson",
-            ):
-                raise serializers.ValidationError(
-                    {"upload_files": "At least one attachment is required."}
-                )
-        try:
-            instance.clean()
-        except DjangoValidationError as exc:
-            if hasattr(exc, "message_dict"):
-                raise serializers.ValidationError(exc.message_dict)
-            raise serializers.ValidationError(exc.messages)
-        return attrs
-
     def create(self, validated_data):
         instance = super().create(validated_data)
-        if self._upload_files_payload is not None:
-            sync_uploaded_files(instance, self._upload_files_payload, model_name="accessrequestperson")
+        self.sync_upload_files(instance)
         return instance
 
     def update(self, instance, validated_data):
         instance = super().update(instance, validated_data)
+        self.sync_upload_files(instance)
+        return instance
+
+    def sync_upload_files(self, instance):
         if self._upload_files_payload is not None:
             sync_uploaded_files(instance, self._upload_files_payload, model_name="accessrequestperson")
-        return instance

@@ -143,12 +143,12 @@ class AccessRequestDomainTest(TestCase):
         person.refresh_from_db()
 
         self.assertEqual(request.status, AccessRequest.STATUS_ACCEPTED)
-        self.assertTrue(person.can_check_in)
-        person.check_in(user=self.user)
+        self.assertTrue(person.can_mark_in)
+        person.mark_in(user=self.user)
         person.refresh_from_db()
         self.assertEqual(person.access_status, AccessRequestPerson.ACCESS_IN)
-        self.assertTrue(person.can_check_out)
-        person.check_out(user=self.user)
+        self.assertTrue(person.can_mark_out)
+        person.mark_out(user=self.user)
         person.refresh_from_db()
         self.assertEqual(person.access_status, AccessRequestPerson.ACCESS_OUT)
 
@@ -387,9 +387,9 @@ class AccessRequestIntegrationTest(TestCase):
 
         list_response = self.client.get(reverse("plugins:netbox_smartlock:accessrequest_list"))
         self.assertEqual(list_response.status_code, 200)
-        self.assertContains(list_response, "Access Requests")
+        self.assertContains(list_response, "Phiếu yêu cầu vào ra")
         self.assertContains(list_response, "Configure Table")
-        self.assertContains(list_response, "Export Excel")
+        self.assertContains(list_response, "Xuất Excel")
         list_content = list_response.content.decode()
         self.assertNotIn('href="None"', list_content)
         self.assertNotIn('formaction="None"', list_content)
@@ -415,9 +415,9 @@ class AccessRequestIntegrationTest(TestCase):
         detail_response = self.client.get(access_request.get_absolute_url())
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "Guest UI Flow")
-        self.assertContains(detail_response, "Request History")
-        self.assertContains(detail_response, "Persons")
-        self.assertNotContains(detail_response, "Send Request")
+        self.assertContains(detail_response, "Lịch sử phiếu")
+        self.assertContains(detail_response, "Đối tượng vào ra")
+        self.assertNotContains(detail_response, "Gửi yêu cầu")
 
         with tempfile.TemporaryDirectory() as media_root:
             with override_settings(MEDIA_ROOT=media_root):
@@ -445,10 +445,10 @@ class AccessRequestIntegrationTest(TestCase):
                 )
 
         detail_response = self.client.get(access_request.get_absolute_url())
-        self.assertContains(detail_response, "Send Request")
+        self.assertContains(detail_response, "Gửi yêu cầu")
         self.assertContains(detail_response, "Tran Thi B")
         self.assertContains(detail_response, "access.png")
-        self.assertContains(detail_response, "Import Persons")
+        self.assertContains(detail_response, "Import đối tượng")
         self.assertContains(
             detail_response,
             f"{reverse('plugins:netbox_smartlock:accessrequestperson_bulk_import')}?request={access_request.pk}",
@@ -476,8 +476,8 @@ class AccessRequestIntegrationTest(TestCase):
         response = self.client.get(access_request.get_absolute_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Add Person")
-        self.assertNotContains(response, "Import Persons")
+        self.assertNotContains(response, "Thêm đối tượng")
+        self.assertNotContains(response, "Import đối tượng")
         self.assertNotContains(response, reverse("plugins:netbox_smartlock:accessrequestperson_add"))
         self.assertNotContains(response, reverse("plugins:netbox_smartlock:accessrequestperson_bulk_import"))
 
@@ -563,10 +563,10 @@ class AccessRequestIntegrationTest(TestCase):
         )
         openpyxl = import_module("openpyxl")
         workbook = openpyxl.load_workbook(BytesIO(excel_response.content))
-        self.assertIn("Access Requests", workbook.sheetnames)
+        self.assertIn("Phiếu yêu cầu", workbook.sheetnames)
         self.assertIn(
             "Exported Request",
-            [cell.value for cell in workbook["Access Requests"]["A"]],
+            [cell.value for cell in workbook["Phiếu yêu cầu"]["A"]],
         )
 
         request_serializer_class = self.serializer_class("AccessRequestSerializer")
@@ -601,7 +601,7 @@ class AccessRequestIntegrationTest(TestCase):
         self.assertEqual(response.status_code, 200)
         openpyxl = import_module("openpyxl")
         workbook = openpyxl.load_workbook(BytesIO(response.content))
-        names = [cell.value for cell in workbook["Access Requests"]["A"]]
+        names = [cell.value for cell in workbook["Phiếu yêu cầu"]["A"]]
 
         self.assertIn("Owned Export Request", names)
         self.assertNotIn("Other Export Request", names)
@@ -766,7 +766,7 @@ class AccessRequestIntegrationTest(TestCase):
         get_response = self.client.get(reverse("plugins:netbox_smartlock:accessrequest_bulk_import"))
 
         self.assertEqual(get_response.status_code, 200)
-        self.assertContains(get_response, "Access Request Bulk Import")
+        self.assertContains(get_response, "Import Phiếu yêu cầu vào ra")
 
         post_response = self.client.post(
             reverse("plugins:netbox_smartlock:accessrequest_bulk_import"),
@@ -1113,7 +1113,7 @@ class AccessRequestIntegrationTest(TestCase):
         self.grant_object_permission(Location, ["view"])
 
         detail_response = self.client.get(access_request.get_absolute_url())
-        self.assertContains(detail_response, "Import Persons")
+        self.assertContains(detail_response, "Import đối tượng")
         self.assertContains(
             detail_response,
             f"{reverse('plugins:netbox_smartlock:accessrequestperson_bulk_import')}?request={access_request.pk}",
@@ -1341,11 +1341,11 @@ class AccessRequestIntegrationTest(TestCase):
 
         security_items = []
         for group in navigation.menu.groups:
-            if group.label == "Security Control":
+            if group.label == "Kiểm soát an ninh":
                 security_items = list(group.items)
                 break
 
-        self.assertEqual([item.link_text for item in security_items], ["Access Requests"])
+        self.assertEqual([item.link_text for item in security_items], ["Phiếu yêu cầu vào ra"])
         self.assertFalse(
             any(
                 getattr(button, "link", "") == "plugins:netbox_smartlock:accessrequestperson_add"
@@ -1496,15 +1496,15 @@ class AccessRequestIntegrationTest(TestCase):
             "access-request-history-tab",
             "access-request-changelog-tab",
             "access-request-persons-tab",
-            "Username",
-            "Full Name",
-            "Type",
-            "Object",
-            "Request ID",
-            "Phiếu yêu cầu ra vào",
-            "Lịch sử yêu cầu",
-            "Nhật ký thay đổi",
+            "Tài khoản",
+            "Họ tên",
+            "Loại",
             "Đối tượng",
+            "Mã request",
+            "Phiếu yêu cầu vào ra",
+            "Lịch sử phiếu",
+            "Nhật ký thay đổi",
+            "Đối tượng vào ra",
         ):
             self.assertContains(response, expected)
 
@@ -1829,7 +1829,7 @@ class AccessRequestIntegrationTest(TestCase):
 
         detail_response = self.client.get(access_request.get_absolute_url())
         self.assertEqual(detail_response.status_code, 200)
-        self.assertContains(detail_response, "Confirm")
+        self.assertContains(detail_response, "Xác nhận")
         self.assertNotIn('href="None"', detail_response.content.decode())
         self.assertNotIn('formaction="None"', detail_response.content.decode())
 
@@ -1855,19 +1855,19 @@ class AccessRequestIntegrationTest(TestCase):
         access_request.refresh_from_db()
         self.assertEqual(access_request.status, self.AccessRequest.STATUS_ACCEPTED)
 
-        check_in_response = self.client.post(
-            reverse("plugins:netbox_smartlock:accessrequestperson_check_in", kwargs={"pk": person.pk}),
+        in_response = self.client.post(
+            reverse("plugins:netbox_smartlock:accessrequestperson_in", kwargs={"pk": person.pk}),
             {"return_url": access_request.get_absolute_url()},
         )
-        self.assertEqual(check_in_response.status_code, 302)
+        self.assertEqual(in_response.status_code, 302)
         person.refresh_from_db()
         self.assertEqual(person.access_status, self.AccessRequestPerson.ACCESS_IN)
 
-        check_out_response = self.client.post(
-            reverse("plugins:netbox_smartlock:accessrequestperson_check_out", kwargs={"pk": person.pk}),
+        out_response = self.client.post(
+            reverse("plugins:netbox_smartlock:accessrequestperson_out", kwargs={"pk": person.pk}),
             {"return_url": access_request.get_absolute_url()},
         )
-        self.assertEqual(check_out_response.status_code, 302)
+        self.assertEqual(out_response.status_code, 302)
         person.refresh_from_db()
         self.assertEqual(person.access_status, self.AccessRequestPerson.ACCESS_OUT)
 
@@ -1905,7 +1905,7 @@ class AccessRequestIntegrationTest(TestCase):
 
         self.assertEqual(detail_response.status_code, 200)
         self.assertContains(detail_response, "complete-request-modal")
-        self.assertContains(detail_response, "Complete Access Request")
+        self.assertContains(detail_response, "Hoàn thành phiếu yêu cầu")
         self.assertContains(detail_response, "data-bs-target=\"#complete-request-modal\"")
 
     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
@@ -2138,10 +2138,10 @@ class AccessRequestIntegrationTest(TestCase):
         grant_change(allowed_in, "person-in")
 
         blocked_response = self.client.post(
-            reverse("plugins:netbox_smartlock:accessrequestperson_check_in", kwargs={"pk": blocked_in.pk})
+            reverse("plugins:netbox_smartlock:accessrequestperson_in", kwargs={"pk": blocked_in.pk})
         )
         allowed_response = self.client.post(
-            reverse("plugins:netbox_smartlock:accessrequestperson_check_in", kwargs={"pk": allowed_in.pk})
+            reverse("plugins:netbox_smartlock:accessrequestperson_in", kwargs={"pk": allowed_in.pk})
         )
         blocked_in.refresh_from_db()
         allowed_in.refresh_from_db()
@@ -2168,10 +2168,10 @@ class AccessRequestIntegrationTest(TestCase):
         grant_change(allowed_out, "person-out")
 
         blocked_response = self.client.post(
-            reverse("plugins:netbox_smartlock:accessrequestperson_check_out", kwargs={"pk": blocked_out.pk})
+            reverse("plugins:netbox_smartlock:accessrequestperson_out", kwargs={"pk": blocked_out.pk})
         )
         allowed_response = self.client.post(
-            reverse("plugins:netbox_smartlock:accessrequestperson_check_out", kwargs={"pk": allowed_out.pk})
+            reverse("plugins:netbox_smartlock:accessrequestperson_out", kwargs={"pk": allowed_out.pk})
         )
         blocked_out.refresh_from_db()
         allowed_out.refresh_from_db()

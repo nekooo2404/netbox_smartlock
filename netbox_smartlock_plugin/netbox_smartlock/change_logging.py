@@ -7,12 +7,7 @@ from core.models.change_logging import ObjectChange
 
 
 def annotate_creator(queryset, alias="created_by_name"):
-    """Annotate the creator from NetBox change logs.
-
-    This is a derived display field. It avoids changing the SmartLock schema, but
-    depends on ObjectChange retention and should be revisited if creator becomes
-    a high-volume reporting dimension.
-    """
+    """Annotate người tạo từ ObjectChange của NetBox để tránh thêm field không cần thiết."""
     content_type = ContentType.objects.get_for_model(queryset.model)
     creator_subquery = (
         ObjectChange.objects.filter(

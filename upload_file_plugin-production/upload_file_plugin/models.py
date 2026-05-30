@@ -6,7 +6,7 @@ class UploadedFile(models.Model):
     id = models.AutoField(primary_key=True)
     file = models.FileField(max_length=1000)
     file_name = models.CharField(max_length=255, blank=True)
-    # Generic relation to any model
+    # GenericForeignKey giúp một bảng file dùng chung cho nhiều plugin/model NetBox.
     content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
     object_id = models.PositiveIntegerField(null=True, blank=True)
     model_name = models.CharField(max_length=100, blank=True)

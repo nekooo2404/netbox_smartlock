@@ -6,15 +6,15 @@ menu = PluginMenu(
     label="SmartLock",
     groups=(
         (
-            "Security Control",
+            "Kiểm soát an ninh",
             (
                 PluginMenuItem(
                     link="plugins:netbox_smartlock:accessrequest_list",
-                    link_text="Access Requests",
+                    link_text="Phiếu yêu cầu vào ra",
                     buttons=(
                         PluginMenuButton(
                             link="plugins:netbox_smartlock:accessrequest_add",
-                            title="Add",
+                            title="Thêm",
                             icon_class="mdi mdi-plus-thick",
                             color=_BTN_GREEN,
                         ),
@@ -23,15 +23,15 @@ menu = PluginMenu(
             ),
         ),
         (
-            "Devices",
+            "Thiết bị",
             (
                 PluginMenuItem(
                     link="plugins:netbox_smartlock:smartlock_list",
-                    link_text="Smart Locks",
+                    link_text="Khóa thông minh",
                     buttons=(
                         PluginMenuButton(
                             link="plugins:netbox_smartlock:smartlock_add",
-                            title="Add",
+                            title="Thêm",
                             icon_class="mdi mdi-plus-thick",
                             color=_BTN_GREEN,
                         ),
@@ -40,15 +40,15 @@ menu = PluginMenu(
             ),
         ),
         (
-            "Catalog",
+            "Danh mục",
             (
                 PluginMenuItem(
                     link="plugins:netbox_smartlock:assetgroup_list",
-                    link_text="Asset Groups",
+                    link_text="Nhóm tài sản",
                     buttons=(
                         PluginMenuButton(
                             link="plugins:netbox_smartlock:assetgroup_add",
-                            title="Add",
+                            title="Thêm",
                             icon_class="mdi mdi-plus-thick",
                             color=_BTN_GREEN,
                         ),

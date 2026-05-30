@@ -29,6 +29,7 @@ SMARTLOCK_BASE_FIELDS = (
 
 
 def normalize_smartlock_text_fields(cleaned_data):
+    """Chuẩn hóa đồng nhất các field text của SmartLock cho form, import và API."""
     cleaned_data = cleaned_data or {}
     for field_name in SMARTLOCK_TEXT_FIELDS:
         if field_name in cleaned_data:
@@ -37,6 +38,7 @@ def normalize_smartlock_text_fields(cleaned_data):
 
 
 def apply_smartlock_cleaned_data(instance, cleaned_data, *, include_rack=True):
+    """Áp dữ liệu lên instance tạm để chạy chung rule hierarchy trước khi lưu thật."""
     cleaned_data = cleaned_data or {}
     normalize_smartlock_text_fields(cleaned_data)
 
@@ -54,6 +56,7 @@ def apply_smartlock_cleaned_data(instance, cleaned_data, *, include_rack=True):
 
 
 def validate_smartlock_hierarchy(instance):
+    """Chạy rule mapping DCIM và trả lỗi Django ValidationError theo từng field."""
     errors = {}
     sync_smartlock_hierarchy(instance, errors=errors)
     if errors:
@@ -62,6 +65,7 @@ def validate_smartlock_hierarchy(instance):
 
 
 def build_smartlock_candidate(instance=None, data=None):
+    """Tạo bản nháp SmartLock để serializer validate partial update mà không mutate object gốc."""
     from .models import SmartLock
 
     candidate = SmartLock()
@@ -82,6 +86,7 @@ def normalize_smartlock_form_data(instance, cleaned_data):
 
 
 def normalize_smartlock_import_data(instance, cleaned_data):
+    """Import cho phép dùng rack_lookup thay cho rack id để bám luồng CSV thân thiện hơn."""
     rack_lookup = normalize_text(cleaned_data.get("rack_lookup"))
     if rack_lookup:
         try:

@@ -35,8 +35,8 @@ urlpatterns = [
     path("access-request-persons/<int:pk>/delete/", views.AccessRequestPersonDeleteView.as_view(), name="accessrequestperson_delete"),
     path("access-request-persons/<int:pk>/verify-valid/", views.AccessRequestPersonVerifyValidView.as_view(), name="accessrequestperson_verify_valid"),
     path("access-request-persons/<int:pk>/verify-invalid/", views.AccessRequestPersonVerifyInvalidView.as_view(), name="accessrequestperson_verify_invalid"),
-    path("access-request-persons/<int:pk>/check-in/", views.AccessRequestPersonCheckInView.as_view(), name="accessrequestperson_check_in"),
-    path("access-request-persons/<int:pk>/check-out/", views.AccessRequestPersonCheckOutView.as_view(), name="accessrequestperson_check_out"),
+    path("access-request-persons/<int:pk>/in/", views.AccessRequestPersonInView.as_view(), name="accessrequestperson_in"),
+    path("access-request-persons/<int:pk>/out/", views.AccessRequestPersonOutView.as_view(), name="accessrequestperson_out"),
     path("access-request-persons/<int:pk>/changelog/", views.AccessRequestPersonChangeLogView.as_view(), name="accessrequestperson_changelog"),
 
     # --- SmartLock ---

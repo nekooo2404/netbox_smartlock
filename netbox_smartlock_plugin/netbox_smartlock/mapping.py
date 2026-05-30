@@ -21,10 +21,12 @@ WARRANTY_STATE_CHOICES = (
 
 
 def normalize_text(value):
+    """Chuẩn hóa text đầu vào từ UI/API/import trước khi validate và lưu."""
     return str(value or "").strip()
 
 
 def get_warranty_state(expiration_date, *, today=None):
+    """Phân loại trạng thái bảo hành; mốc cảnh báo cố định là 30 ngày."""
     if not expiration_date:
         return WARRANTY_STATE_MISSING
 
@@ -37,6 +39,7 @@ def get_warranty_state(expiration_date, *, today=None):
 
 
 def format_rack_lookup(rack):
+    """Sinh khóa import/export ổn định cho rack: site|location|rack khi có đủ dữ liệu."""
     if not rack:
         return ""
 
@@ -50,6 +53,7 @@ def format_rack_lookup(rack):
 
 
 def resolve_rack_lookup(raw_value, *, site=None, location=None):
+    """Tìm rack từ CSV, ưu tiên scope site/location đã chọn để tránh nhập nhầm rack trùng tên."""
     value = normalize_text(raw_value)
     if not value:
         return None
@@ -66,8 +70,8 @@ def resolve_rack_lookup(raw_value, *, site=None, location=None):
         site_slug, location_slug, rack_name = parts
     else:
         raise ValidationError(
-            f"Rack lookup must use 'rack', 'site{RACK_LOOKUP_SEPARATOR}rack', "
-            f"or 'site{RACK_LOOKUP_SEPARATOR}location{RACK_LOOKUP_SEPARATOR}rack'."
+            f"Tra cứu tủ rack phải dùng định dạng 'rack', 'site{RACK_LOOKUP_SEPARATOR}rack', "
+            f"hoặc 'site{RACK_LOOKUP_SEPARATOR}location{RACK_LOOKUP_SEPARATOR}rack'."
         )
 
     queryset = Rack.objects.select_related("site", "location")
@@ -83,42 +87,43 @@ def resolve_rack_lookup(raw_value, *, site=None, location=None):
 
     matches = list(queryset.filter(name=rack_name)[:2])
     if not matches:
-        raise ValidationError(f"Rack '{value}' was not found.")
+        raise ValidationError(f"Không tìm thấy tủ rack '{value}'.")
     if len(matches) > 1:
         raise ValidationError(
-            f"Rack '{value}' is ambiguous. Include site/location in the import value."
+            f"Tủ rack '{value}' bị trùng. Vui lòng bổ sung site/location trong giá trị import."
         )
     return matches[0]
 
 
 def sync_smartlock_hierarchy(instance, errors=None):
+    """Đồng bộ Region/Site/Location từ Rack/Location/Site DCIM và gom lỗi theo field."""
     errors = errors if errors is not None else {}
 
     if getattr(instance, "rack_id", None):
         rack = instance.rack
 
         if not getattr(rack, "site_id", None):
-            errors["rack"] = "Rack must belong to a NetBox Site."
+            errors["rack"] = "Tủ rack phải thuộc một địa điểm NetBox."
         elif getattr(instance, "site_id", None) and instance.site_id != rack.site_id:
-            errors["rack"] = "Rack must belong to the selected NetBox Site."
+            errors["rack"] = "Tủ rack phải thuộc địa điểm NetBox đã chọn."
         else:
             instance.site = rack.site
 
         rack_location_id = getattr(rack, "location_id", None)
         if rack_location_id:
             if getattr(instance, "location_id", None) and instance.location_id != rack_location_id:
-                errors["rack"] = "Rack must belong to the selected NetBox Location."
+                errors["rack"] = "Tủ rack phải thuộc vị trí NetBox đã chọn."
             else:
                 instance.location = rack.location
         elif not getattr(instance, "location_id", None):
             errors["location"] = (
-                "Rack has no NetBox Location. Update the Rack or select a Location manually."
+                "Tủ rack chưa có vị trí NetBox. Vui lòng cập nhật tủ rack hoặc chọn vị trí thủ công."
             )
 
     if getattr(instance, "location_id", None):
         location = instance.location
         if getattr(instance, "site_id", None) and instance.site_id != location.site_id:
-            errors["location"] = "Location must belong to the selected Site."
+            errors["location"] = "Vị trí phải thuộc địa điểm đã chọn."
         else:
             instance.site = location.site
 
@@ -126,17 +131,17 @@ def sync_smartlock_hierarchy(instance, errors=None):
         site = instance.site
         site_region_id = getattr(site, "region_id", None)
         if not site_region_id:
-            errors["site"] = "Site must belong to a NetBox Region before Smart Lock mapping."
+            errors["site"] = "Địa điểm phải thuộc một khu vực NetBox trước khi ánh xạ khóa thông minh."
         elif getattr(instance, "region_id", None) and instance.region_id != site_region_id:
-            errors["site"] = "Site must belong to the selected Region."
+            errors["site"] = "Địa điểm phải thuộc khu vực đã chọn."
         else:
             instance.region = site.region
 
     if not getattr(instance, "site_id", None):
-        errors.setdefault("site", "Site is required.")
+        errors.setdefault("site", "Bắt buộc chọn địa điểm.")
     if not getattr(instance, "location_id", None):
-        errors.setdefault("location", "Location is required.")
+        errors.setdefault("location", "Bắt buộc chọn vị trí.")
     if not getattr(instance, "region_id", None):
-        errors.setdefault("region", "Region is required.")
+        errors.setdefault("region", "Bắt buộc chọn khu vực.")
 
     return errors

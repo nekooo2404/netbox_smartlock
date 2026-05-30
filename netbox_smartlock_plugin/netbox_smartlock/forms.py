@@ -19,17 +19,74 @@ from .mapping import (
     WARRANTY_STATE_CHOICES,
     normalize_text,
 )
+from .messages import (
+    ACCESS_REQUEST_PERSON_EDIT_LOCKED_MESSAGE,
+    ACCESS_REQUEST_PERSON_FILE_REQUIRED_MESSAGE,
+    ACCESS_REQUEST_PERSON_IMPORT_LOCKED_MESSAGE,
+    ACCESS_REQUEST_PERSON_IMPORT_SCOPE_DENIED_MESSAGE,
+    ACCESS_REQUEST_PERSON_SCOPED_REQUEST_UNAVAILABLE_MESSAGE,
+    ACCESS_REQUEST_PERSON_SCOPE_DENIED_MESSAGE,
+    ACCESS_REQUEST_REQUIRED_MESSAGE,
+)
 from .models import AccessRequest, AccessRequestPerson, AssetGroup, SmartLock
 from .permissions import restrict_access_request_persons_for_user, restrict_access_requests_for_user, user_can_access_request
 from .services import normalize_smartlock_form_data, normalize_smartlock_import_data
-from .upload_files import files_for_object, upload_payload_has_valid_file
+from .ui import (
+    ACCESS_REQUEST_PERSON_ACCESS_LABELS,
+    ACCESS_REQUEST_PERSON_VERIFY_LABELS,
+    ACCESS_REQUEST_STATUS_LABELS,
+    ASSET_GROUP_STATUS_LABELS,
+    RACK_FACE_LABELS,
+    SMARTLOCK_STATUS_LABELS,
+    WARRANTY_STATE_LABELS,
+    choices_with_labels,
+)
+from .upload_files import upload_payload_has_valid_file
+
+
+DCIM_SCOPE_FIELD_NAMES = (
+    "region", "region_id", "site", "site_id",
+    "location", "location_id", "rack", "rack_id",
+)
+IMPORT_COMMON_FIELD_LABELS = {
+    "id": "ID",
+    "tags": "Tags",
+    "changelog_message": "Thông điệp nhật ký thay đổi",
+    "background_job": "Chạy nền",
+    "data": "Dữ liệu",
+    "format": "Định dạng",
+    "csv_delimiter": "Ký tự phân tách CSV",
+    "upload_file": "File tải lên",
+    "data_source": "Nguồn dữ liệu",
+    "data_file": "File dữ liệu",
+}
+IMPORT_COMMON_FIELD_HELP_TEXTS = {
+    "id": "ID số của bản ghi hiện có cần cập nhật; để trống khi tạo mới.",
+    "tags": 'Slug tag, phân tách bằng dấu phẩy và đặt trong dấu nháy kép, ví dụ "tag1,tag2,tag3".',
+    "changelog_message": "",
+    "background_job": "Xử lý import bằng background job.",
+}
+BULK_COMMON_FIELD_LABELS = {
+    "changelog_message": "Thông điệp nhật ký thay đổi",
+    "background_job": "Chạy nền",
+    "add_tags": "Thêm tag",
+    "remove_tags": "Xóa tag",
+    "find": "Tìm",
+    "replace": "Thay bằng",
+    "use_regex": "Dùng regex",
+}
+BULK_COMMON_FIELD_HELP_TEXTS = {
+    "changelog_message": "",
+    "background_job": "Xử lý thao tác bằng background job.",
+}
 
 
 def restrict_dcim_scope_fields(form, user, action="view"):
+    """Giới hạn lựa chọn DCIM theo object permission của NetBox."""
     if user is None:
         return
 
-    for field_name in ("region", "region_id", "site", "site_id", "location", "location_id", "rack", "rack_id"):
+    for field_name in DCIM_SCOPE_FIELD_NAMES:
         field = form.fields.get(field_name)
         queryset = getattr(field, "queryset", None)
         if queryset is not None and hasattr(queryset, "restrict"):
@@ -37,6 +94,7 @@ def restrict_dcim_scope_fields(form, user, action="view"):
 
 
 def restrict_asset_group_field(form, user, action="view"):
+    """Chỉ cho chọn nhóm tài sản đang hoạt động và nằm trong scope quyền của user."""
     field = form.fields.get("asset_group")
     queryset = getattr(field, "queryset", None)
     if queryset is None:
@@ -49,6 +107,7 @@ def restrict_asset_group_field(form, user, action="view"):
 
 
 def object_in_user_scope(obj, user, action="view"):
+    """Kiểm tra object đã submit có còn nằm trong queryset restrict của NetBox hay không."""
     if obj is None or user is None:
         return True
 
@@ -58,21 +117,75 @@ def object_in_user_scope(obj, user, action="view"):
     return queryset.exists()
 
 
+def apply_field_labels_and_help_texts(form, labels, help_texts=None):
+    help_texts = help_texts or {}
+    for field_name, label in labels.items():
+        field = form.fields.get(field_name)
+        if field is None:
+            continue
+        field.label = label
+        if field_name in help_texts:
+            field.help_text = help_texts[field_name]
+
+
+def translate_import_common_fields(form):
+    """Việt hóa các field chung do NetBox thêm vào form import."""
+    apply_field_labels_and_help_texts(form, IMPORT_COMMON_FIELD_LABELS, IMPORT_COMMON_FIELD_HELP_TEXTS)
+
+
+def translate_bulk_common_fields(form):
+    """Việt hóa các field chung do NetBox thêm vào form bulk action."""
+    apply_field_labels_and_help_texts(form, BULK_COMMON_FIELD_LABELS, BULK_COMMON_FIELD_HELP_TEXTS)
+
+
+def scope_location_field_to_access_request(form, access_request):
+    if not access_request or not access_request.site_id:
+        return
+
+    location_field = form.fields["location"]
+    location_field.queryset = location_field.queryset.filter(site=access_request.site)
+    if hasattr(location_field.widget, "add_query_param"):
+        location_field.widget.add_query_param("site_id", str(access_request.site_id))
+
+
+def enable_dynamic_location_scope(form):
+    location_widget = form.fields["location"].widget
+    location_widget.attrs["data-smartlock-request-field"] = "id_request"
+    location_widget.attrs["data-smartlock-location-scope"] = "true"
+
+
+def add_required_upload_error(form, upload_files, *, instance=None):
+    has_valid_file = upload_payload_has_valid_file(
+        upload_files,
+        instance=instance,
+        model_name=form.upload_file_model_name,
+    )
+    if not has_valid_file:
+        form.add_error(form.upload_file_field_name, ACCESS_REQUEST_PERSON_FILE_REQUIRED_MESSAGE)
+
+
 class AssetGroupForm(UploadFileFormMixin, NetBoxModelForm):
     upload_file_model_name = "assetgroup"
     slug = SlugField()
 
     fieldsets = (
-        FieldSet("name", "slug", "code", "status", name="Primary Information"),
-        FieldSet("description", "comments", name="Description"),
-        FieldSet("upload_files", "tags", name="Additional Data"),
+        FieldSet("name", "slug", "code", "status", name="Thông tin chính"),
+        FieldSet("description", "comments", name="Mô tả"),
+        FieldSet("upload_files", "tags", name="Dữ liệu bổ sung"),
     )
 
     class Meta:
         model = AssetGroup
         fields = ("name", "slug", "code", "status", "description", "comments", "tags")
+        labels = {
+            "name": "Tên",
+            "code": "Mã",
+            "status": "Trạng thái",
+            "description": "Mô tả",
+            "comments": "Ghi chú",
+        }
         help_texts = {
-            "code": "Group code for import/export and data reconciliation.",
+            "code": "Mã nhóm dùng cho nhập/xuất dữ liệu và đối soát.",
         }
 
     def clean_name(self):
@@ -93,25 +206,40 @@ class AssetGroupFilterForm(NetBoxModelFilterSetForm):
     model = AssetGroup
     fieldsets = (
         FieldSet("q", "filter_id", "tag"),
-        FieldSet("name", "code", "status", name="Asset Group"),
+        FieldSet("name", "code", "status", name="Nhóm tài sản"),
     )
     selector_fields = ("filter_id", "q", "status")
 
-    name = forms.CharField(required=False, label="Name")
-    code = forms.CharField(required=False, label="Code")
-    status = forms.MultipleChoiceField(required=False, choices=AssetGroup.STATUS_CHOICES, label="Status")
+    name = forms.CharField(required=False, label="Tên")
+    code = forms.CharField(required=False, label="Mã")
+    status = forms.MultipleChoiceField(
+        required=False,
+        choices=choices_with_labels(AssetGroup.STATUS_CHOICES, ASSET_GROUP_STATUS_LABELS),
+        label="Trạng thái",
+    )
     tag = TagFilterField(model)
 
 
 class AssetGroupImportForm(NetBoxModelImportForm):
     status = CSVChoiceField(
-        choices=AssetGroup.STATUS_CHOICES,
-        help_text="One of: active or inactive.",
+        choices=choices_with_labels(AssetGroup.STATUS_CHOICES, ASSET_GROUP_STATUS_LABELS),
+        help_text="Một trong các giá trị: active hoặc inactive.",
     )
 
     class Meta:
         model = AssetGroup
         fields = ("name", "slug", "code", "status", "description", "comments")
+        labels = {
+            "name": "Tên",
+            "code": "Mã",
+            "status": "Trạng thái",
+            "description": "Mô tả",
+            "comments": "Ghi chú",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        translate_import_common_fields(self)
 
     def clean_name(self):
         return normalize_text(self.cleaned_data["name"])
@@ -133,44 +261,44 @@ class SmartLockForm(UploadFileFormMixin, NetBoxModelForm):
 
     asset_group = DynamicModelChoiceField(
         queryset=AssetGroup.objects.filter(status=AssetGroup.STATUS_ACTIVE),
-        label="Asset Group",
+        label="Nhóm tài sản",
     )
     region = DynamicModelChoiceField(
         queryset=Region.objects.all(),
         required=True,
-        label="Region",
+        label="Khu vực",
     )
     site = DynamicModelChoiceField(
         queryset=Site.objects.all(),
         required=True,
-        label="Site",
+        label="Địa điểm",
         query_params={"region_id": "$region"},
     )
     location = DynamicModelChoiceField(
         queryset=Location.objects.all(),
         required=True,
-        label="Location",
+        label="Vị trí",
         query_params={"site_id": "$site"},
     )
     rack = DynamicModelChoiceField(
         queryset=Rack.objects.select_related("site", "location"),
         required=False,
-        label="Rack",
+        label="Tủ rack",
         query_params={"site_id": "$site", "location_id": "$location"},
-        help_text="When Rack is selected, the plugin validates and synchronizes Site/Location/Region from the Rack.",
+        help_text="Khi chọn tủ rack, plugin sẽ kiểm tra và đồng bộ Địa điểm/Vị trí/Khu vực từ tủ rack.",
     )
     rack_face = forms.ChoiceField(
         required=False,
-        label="Rack Face",
-        choices=(("", "---------"),) + SmartLock.RACK_FACE_CHOICES,
+        label="Mặt tủ rack",
+        choices=(("", "---------"),) + choices_with_labels(SmartLock.RACK_FACE_CHOICES, RACK_FACE_LABELS),
     )
 
     fieldsets = (
-        FieldSet("name", "code", "asset_group", "status", name="Primary Information"),
-        FieldSet("device_type", "model", "serial", "manufacturer", name="Device"),
-        FieldSet("setup_date", "bought_date", "warranty_period", "warranty_expiration_preview", name="Lifecycle and Warranty"),
-        FieldSet("region", "site", "location", "rack", "rack_face", name="Location"),
-        FieldSet("description", "comments", "upload_files", "tags", name="Additional Data"),
+        FieldSet("name", "code", "asset_group", "status", name="Thông tin chính"),
+        FieldSet("device_type", "model", "serial", "manufacturer", name="Thiết bị"),
+        FieldSet("setup_date", "bought_date", "warranty_period", "warranty_expiration_preview", name="Vòng đời và bảo hành"),
+        FieldSet("region", "site", "location", "rack", "rack_face", name="Vị trí"),
+        FieldSet("description", "comments", "upload_files", "tags", name="Dữ liệu bổ sung"),
     )
 
     class Meta:
@@ -182,6 +310,20 @@ class SmartLockForm(UploadFileFormMixin, NetBoxModelForm):
             "region", "site", "location", "rack", "rack_face",
             "description", "comments", "tags",
         )
+        labels = {
+            "name": "Tên",
+            "code": "Mã",
+            "status": "Trạng thái",
+            "device_type": "Loại thiết bị",
+            "model": "Model",
+            "serial": "Serial",
+            "manufacturer": "Nhà sản xuất",
+            "setup_date": "Ngày lắp đặt",
+            "bought_date": "Ngày mua",
+            "warranty_period": "Thời hạn bảo hành",
+            "description": "Mô tả",
+            "comments": "Ghi chú",
+        }
         widgets = {
             "setup_date": forms.DateInput(attrs={"type": "date"}),
             "bought_date": forms.DateInput(attrs={"type": "date"}),
@@ -189,8 +331,8 @@ class SmartLockForm(UploadFileFormMixin, NetBoxModelForm):
             "comments": forms.Textarea(attrs={"rows": 4}),
         }
         help_texts = {
-            "code": "Unique code for import/export and asset reconciliation.",
-            "warranty_period": "Measured in months. The system calculates the warranty expiration date automatically.",
+            "code": "Mã duy nhất dùng cho nhập/xuất dữ liệu và đối soát tài sản.",
+            "warranty_period": "Tính theo tháng. Hệ thống tự tính ngày hết hạn bảo hành.",
         }
 
     def __init__(self, *args, **kwargs):
@@ -198,9 +340,10 @@ class SmartLockForm(UploadFileFormMixin, NetBoxModelForm):
         super().__init__(*args, **kwargs)
         restrict_asset_group_field(self, self.request_user)
         restrict_dcim_scope_fields(self, self.request_user)
+        self.fields["warranty_period"].help_text = "Đơn vị: tháng"
         self.fields["warranty_expiration_preview"] = forms.DateField(
             required=False,
-            label="Warranty Expiration Date",
+            label="Ngày hết hạn bảo hành",
             disabled=True,
             initial=getattr(self.instance, "warranty_expiration_date", None),
             widget=forms.DateInput(attrs={"type": "date"}),
@@ -240,56 +383,64 @@ class SmartLockFilterForm(NetBoxModelFilterSetForm):
     model = SmartLock
     fieldsets = (
         FieldSet("q", "filter_id", "tag"),
-        FieldSet("name", "code", "status", "asset_group_id", "warranty_state", name="Primary Information"),
-        FieldSet("device_type", "manufacturer", "serial", "device_model", name="Device"),
-        FieldSet("region_id", "site_id", "location_id", "rack_id", "rack_face", name="Location"),
+        FieldSet("name", "code", "status", "asset_group_id", "warranty_state", name="Thông tin chính"),
+        FieldSet("device_type", "manufacturer", "serial", "device_model", name="Thiết bị"),
+        FieldSet("region_id", "site_id", "location_id", "rack_id", "rack_face", name="Vị trí"),
     )
     selector_fields = (
         "filter_id", "q", "status", "asset_group_id", "warranty_state",
         "site_id", "location_id", "rack_id",
     )
 
-    name = forms.CharField(required=False, label="Name")
-    code = forms.CharField(required=False, label="Code")
-    status = forms.MultipleChoiceField(required=False, choices=SmartLock.STATUS_CHOICES, label="Status")
+    name = forms.CharField(required=False, label="Tên")
+    code = forms.CharField(required=False, label="Mã")
+    status = forms.MultipleChoiceField(
+        required=False,
+        choices=choices_with_labels(SmartLock.STATUS_CHOICES, SMARTLOCK_STATUS_LABELS),
+        label="Trạng thái",
+    )
     asset_group_id = DynamicModelMultipleChoiceField(
         queryset=AssetGroup.objects.all(),
         required=False,
-        label="Asset Group",
+        label="Nhóm tài sản",
     )
     warranty_state = forms.MultipleChoiceField(
         required=False,
-        choices=WARRANTY_STATE_CHOICES,
-        label="Warranty State",
+        choices=choices_with_labels(WARRANTY_STATE_CHOICES, WARRANTY_STATE_LABELS),
+        label="Trạng thái bảo hành",
     )
-    device_type = forms.CharField(required=False, label="Device Type")
-    manufacturer = forms.CharField(required=False, label="Manufacturer")
+    device_type = forms.CharField(required=False, label="Loại thiết bị")
+    manufacturer = forms.CharField(required=False, label="Nhà sản xuất")
     serial = forms.CharField(required=False, label="Serial")
     device_model = forms.CharField(required=False, label="Model")
     region_id = DynamicModelMultipleChoiceField(
         queryset=Region.objects.all(),
         required=False,
-        label="Region",
+        label="Khu vực",
     )
     site_id = DynamicModelMultipleChoiceField(
         queryset=Site.objects.all(),
         required=False,
-        label="Site",
+        label="Địa điểm",
         query_params={"region_id": "$region_id"},
     )
     location_id = DynamicModelMultipleChoiceField(
         queryset=Location.objects.all(),
         required=False,
-        label="Location",
+        label="Vị trí",
         query_params={"site_id": "$site_id"},
     )
     rack_id = DynamicModelMultipleChoiceField(
         queryset=Rack.objects.all(),
         required=False,
-        label="Rack",
+        label="Tủ rack",
         query_params={"site_id": "$site_id", "location_id": "$location_id"},
     )
-    rack_face = forms.MultipleChoiceField(required=False, choices=SmartLock.RACK_FACE_CHOICES, label="Rack Face")
+    rack_face = forms.MultipleChoiceField(
+        required=False,
+        choices=choices_with_labels(SmartLock.RACK_FACE_CHOICES, RACK_FACE_LABELS),
+        label="Mặt tủ rack",
+    )
     tag = TagFilterField(model)
 
 
@@ -299,51 +450,72 @@ class SmartLockImportForm(NetBoxModelImportForm):
     asset_group = CSVModelChoiceField(
         queryset=AssetGroup.objects.filter(status=AssetGroup.STATUS_ACTIVE),
         to_field_name="slug",
-        help_text="AssetGroup slug.",
+        help_text="Slug của nhóm tài sản.",
     )
     status = CSVChoiceField(
-        choices=SmartLock.STATUS_CHOICES,
-        help_text="One of: active, backup, maintenance, broken.",
+        choices=choices_with_labels(SmartLock.STATUS_CHOICES, SMARTLOCK_STATUS_LABELS),
+        help_text="Một trong các giá trị: active, backup, maintenance, broken.",
     )
     region = CSVModelChoiceField(
         queryset=Region.objects.all(),
         required=False,
         to_field_name="slug",
-        help_text="Region slug. May be inferred from Rack/Site mapping.",
+        help_text="Slug khu vực. Có thể suy ra từ ánh xạ tủ rack/địa điểm.",
     )
     site = CSVModelChoiceField(
         queryset=Site.objects.all(),
         required=False,
         to_field_name="slug",
-        help_text="Site slug. May be inferred from Rack/Location mapping.",
+        help_text="Slug địa điểm. Có thể suy ra từ ánh xạ tủ rack/vị trí.",
     )
     location = CSVModelChoiceField(
         queryset=Location.objects.all(),
         required=False,
         to_field_name="slug",
-        help_text="Location slug. May be inferred from Rack mapping.",
+        help_text="Slug vị trí. Có thể suy ra từ ánh xạ tủ rack.",
     )
     rack_face = CSVChoiceField(
         required=False,
-        choices=SmartLock.RACK_FACE_CHOICES,
-        help_text="One of: front or rear.",
+        choices=choices_with_labels(SmartLock.RACK_FACE_CHOICES, RACK_FACE_LABELS),
+        help_text="Một trong các giá trị: front hoặc rear.",
     )
     rack_lookup = forms.CharField(
         required=False,
-        label="Rack lookup",
-        help_text="Format: rack, site|rack, or site|location|rack.",
+        label="Tra cứu tủ rack",
+        help_text="Định dạng: rack, site|rack hoặc site|location|rack.",
     )
     rack = forms.Field(required=False, widget=forms.HiddenInput)
 
     class Meta:
         model = SmartLock
         fields = SMARTLOCK_IMPORT_MODEL_FIELDS
+        labels = {
+            "name": "Tên",
+            "code": "Mã",
+            "asset_group": "Nhóm tài sản",
+            "status": "Trạng thái",
+            "description": "Mô tả",
+            "comments": "Ghi chú",
+            "device_type": "Loại thiết bị",
+            "model": "Model",
+            "serial": "Serial",
+            "manufacturer": "Nhà sản xuất",
+            "setup_date": "Ngày lắp đặt",
+            "bought_date": "Ngày mua",
+            "warranty_period": "Thời hạn bảo hành",
+            "region": "Khu vực",
+            "site": "Địa điểm",
+            "location": "Vị trí",
+            "rack_face": "Mặt tủ rack",
+        }
 
     def __init__(self, *args, **kwargs):
         self.request_user = kwargs.pop("request_user", None) or self.__class__.request_user
         super().__init__(*args, **kwargs)
         restrict_asset_group_field(self, self.request_user)
         restrict_dcim_scope_fields(self, self.request_user)
+        translate_import_common_fields(self)
+        self.fields["warranty_period"].help_text = "Đơn vị: tháng"
 
     def clean(self):
         super().clean()
@@ -351,9 +523,9 @@ class SmartLockImportForm(NetBoxModelImportForm):
         cleaned_data = normalize_smartlock_import_data(self.instance, cleaned_data)
         for field_name in ("region", "site", "location"):
             if not object_in_user_scope(cleaned_data.get(field_name), self.request_user):
-                self.add_error(field_name, "Select a valid choice. That choice is not one of the available choices.")
+                self.add_error(field_name, "Vui lòng chọn một giá trị hợp lệ trong danh sách cho phép.")
         if not object_in_user_scope(cleaned_data.get("rack"), self.request_user):
-            self.add_error("rack_lookup", "Select a valid choice. That choice is not one of the available choices.")
+            self.add_error("rack_lookup", "Vui lòng chọn một giá trị hợp lệ trong danh sách cho phép.")
         return cleaned_data
 
 
@@ -363,25 +535,30 @@ class AccessRequestForm(NetBoxModelForm):
     region = DynamicModelChoiceField(
         queryset=Region.objects.all(),
         required=False,
-        label="Region",
+        label="Khu vực",
     )
     site = DynamicModelChoiceField(
         queryset=Site.objects.all(),
         required=False,
-        label="Site",
+        label="Địa điểm",
         query_params={"region_id": "$region"},
     )
 
     fieldsets = (
-        FieldSet("name", "expected_date", name="Request"),
-        FieldSet("reason", name="Reason"),
-        FieldSet("region", "site", name="Location Scope"),
-        FieldSet("tags", name="Additional Data"),
+        FieldSet("name", "expected_date", name="Phiếu yêu cầu"),
+        FieldSet("reason", name="Lý do"),
+        FieldSet("region", "site", name="Phạm vi vị trí"),
+        FieldSet("tags", name="Dữ liệu bổ sung"),
     )
 
     class Meta:
         model = AccessRequest
         fields = ("name", "expected_date", "reason", "region", "site", "tags")
+        labels = {
+            "name": "Tên phiếu",
+            "expected_date": "Ngày dự kiến",
+            "reason": "Lý do",
+        }
         widgets = {
             "expected_date": forms.DateInput(attrs={"type": "date", "placeholder": "dd/mm/yyyy"}),
             "reason": forms.Textarea(attrs={"rows": 3}),
@@ -403,21 +580,25 @@ class AccessRequestFilterForm(NetBoxModelFilterSetForm):
     model = AccessRequest
     fieldsets = (
         FieldSet("q", "filter_id", "tag"),
-        FieldSet("name", "status", "region_id", "site_id", name="Access Request"),
+        FieldSet("name", "status", "region_id", "site_id", name="Phiếu yêu cầu vào ra"),
     )
     selector_fields = ("filter_id", "q", "status", "region_id", "site_id")
 
-    name = forms.CharField(required=False, label="Request Name")
-    status = forms.MultipleChoiceField(required=False, choices=AccessRequest.STATUS_CHOICES, label="Status")
+    name = forms.CharField(required=False, label="Tên phiếu")
+    status = forms.MultipleChoiceField(
+        required=False,
+        choices=choices_with_labels(AccessRequest.STATUS_CHOICES, ACCESS_REQUEST_STATUS_LABELS),
+        label="Trạng thái",
+    )
     region_id = DynamicModelMultipleChoiceField(
         queryset=Region.objects.all(),
         required=False,
-        label="Region",
+        label="Khu vực",
     )
     site_id = DynamicModelMultipleChoiceField(
         queryset=Site.objects.all(),
         required=False,
-        label="Site",
+        label="Địa điểm",
         query_params={"region_id": "$region_id"},
     )
     tag = TagFilterField(model)
@@ -428,22 +609,23 @@ class AccessRequestBulkEditForm(NetBoxModelBulkEditForm):
     nullable_fields = ("region", "site")
     request_user = None
 
-    region = DynamicModelChoiceField(queryset=Region.objects.all(), required=False, label="Region")
+    region = DynamicModelChoiceField(queryset=Region.objects.all(), required=False, label="Khu vực")
     site = DynamicModelChoiceField(
         queryset=Site.objects.all(),
         required=False,
-        label="Site",
+        label="Địa điểm",
         query_params={"region_id": "$region"},
     )
 
     fieldsets = (
-        FieldSet("pk", "region", "site", "add_tags", "remove_tags", "changelog_message", name="Access Request"),
+        FieldSet("pk", "region", "site", "add_tags", "remove_tags", "changelog_message", name="Phiếu yêu cầu vào ra"),
     )
 
     def __init__(self, *args, **kwargs):
         self.request_user = kwargs.pop("request_user", None) or self.__class__.request_user
         super().__init__(*args, **kwargs)
         restrict_dcim_scope_fields(self, self.request_user)
+        translate_bulk_common_fields(self)
 
 
 class AccessRequestImportForm(NetBoxModelImportForm):
@@ -453,18 +635,25 @@ class AccessRequestImportForm(NetBoxModelImportForm):
         queryset=Region.objects.all(),
         required=False,
         to_field_name="slug",
-        help_text="Region slug.",
+        help_text="Slug khu vực.",
     )
     site = CSVModelChoiceField(
         queryset=Site.objects.all(),
         required=False,
         to_field_name="slug",
-        help_text="Site slug.",
+        help_text="Slug địa điểm.",
     )
 
     class Meta:
         model = AccessRequest
         fields = ("name", "expected_date", "reason", "region", "site")
+        labels = {
+            "name": "Tên phiếu",
+            "expected_date": "Ngày dự kiến",
+            "reason": "Lý do",
+            "region": "Khu vực",
+            "site": "Địa điểm",
+        }
 
     def __init__(self, *args, **kwargs):
         self.request_user = kwargs.pop("request_user", None) or self.__class__.request_user
@@ -484,18 +673,18 @@ class AccessRequestPersonForm(UploadFileFormMixin, NetBoxModelForm):
 
     request = DynamicModelChoiceField(
         queryset=AccessRequest.objects.all(),
-        label="Access Request",
+        label="Phiếu yêu cầu vào ra",
     )
     location = DynamicModelChoiceField(
         queryset=Location.objects.all(),
         required=False,
-        label="Location",
+        label="Vị trí",
     )
 
     fieldsets = (
-        FieldSet("request", "identity_code", "full_name", "organization", name="Person"),
-        FieldSet("title", "phone", "location", name="Access Scope"),
-        FieldSet("description", "upload_files", "tags", name="Additional Data"),
+        FieldSet("request", "identity_code", "full_name", "organization", name="Đối tượng"),
+        FieldSet("title", "phone", "location", name="Phạm vi vào ra"),
+        FieldSet("description", "upload_files", "tags", name="Dữ liệu bổ sung"),
     )
 
     class Meta:
@@ -504,6 +693,14 @@ class AccessRequestPersonForm(UploadFileFormMixin, NetBoxModelForm):
             "request", "identity_code", "full_name", "organization", "title", "phone",
             "location", "description", "tags",
         )
+        labels = {
+            "identity_code": "CCCD/CMND",
+            "full_name": "Họ tên",
+            "organization": "Đơn vị",
+            "title": "Chức danh",
+            "phone": "Số điện thoại",
+            "description": "Mô tả",
+        }
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
         }
@@ -523,12 +720,9 @@ class AccessRequestPersonForm(UploadFileFormMixin, NetBoxModelForm):
                 access_request = self.fields["request"].queryset.get(pk=request_id)
             except AccessRequest.DoesNotExist:
                 access_request = None
-            if access_request and access_request.site_id:
-                self.fields["location"].queryset = self.fields["location"].queryset.filter(site=access_request.site)
-                self.fields["location"].widget.add_query_param("site_id", str(access_request.site_id))
+            scope_location_field_to_access_request(self, access_request)
         else:
-            self.fields["location"].widget.attrs["data-smartlock-request-field"] = "id_request"
-            self.fields["location"].widget.attrs["data-smartlock-location-scope"] = "true"
+            enable_dynamic_location_scope(self)
 
     def clean_identity_code(self):
         return normalize_text(self.cleaned_data["identity_code"])
@@ -537,18 +731,14 @@ class AccessRequestPersonForm(UploadFileFormMixin, NetBoxModelForm):
         super().clean()
         upload_files = self.cleaned_data.get(self.upload_file_field_name, "[]")
 
-        if not upload_payload_has_valid_file(
-            upload_files,
-            instance=self.instance,
-            model_name=self.upload_file_model_name,
-        ):
-            self.add_error(self.upload_file_field_name, "At least one attachment is required.")
+        # DICM yêu cầu mỗi đối tượng vào ra phải có ít nhất một file định danh đính kèm.
+        add_required_upload_error(self, upload_files, instance=self.instance)
 
         access_request = self.cleaned_data.get("request")
         if self.request_user is not None and access_request and not user_can_access_request(self.request_user, access_request):
-            self.add_error("request", "You do not have permission to add persons to this access request.")
+            self.add_error("request", ACCESS_REQUEST_PERSON_SCOPE_DENIED_MESSAGE)
         if access_request and not access_request.can_guest_edit:
-            self.add_error("request", "Persons cannot be added or edited after an access request is accepted or completed.")
+            self.add_error("request", ACCESS_REQUEST_PERSON_EDIT_LOCKED_MESSAGE)
 
         return self.cleaned_data
 
@@ -572,33 +762,33 @@ class AccessRequestPersonFilterForm(NetBoxModelFilterSetForm):
     model = AccessRequestPerson
     fieldsets = (
         FieldSet("q", "filter_id", "tag"),
-        FieldSet("request_id", "identity_code", "full_name", "verify_status", "access_status", name="Person"),
-        FieldSet("organization", "location_id", name="Scope"),
+        FieldSet("request_id", "identity_code", "full_name", "verify_status", "access_status", name="Đối tượng"),
+        FieldSet("organization", "location_id", name="Phạm vi"),
     )
     selector_fields = ("filter_id", "q", "request_id", "verify_status", "access_status", "location_id")
 
     request_id = DynamicModelMultipleChoiceField(
         queryset=AccessRequest.objects.all(),
         required=False,
-        label="Access Request",
+        label="Phiếu yêu cầu vào ra",
     )
-    identity_code = forms.CharField(required=False, label="Identity Code")
-    full_name = forms.CharField(required=False, label="Full Name")
-    organization = forms.CharField(required=False, label="Organization")
+    identity_code = forms.CharField(required=False, label="CCCD/CMND")
+    full_name = forms.CharField(required=False, label="Họ tên")
+    organization = forms.CharField(required=False, label="Đơn vị")
     verify_status = forms.MultipleChoiceField(
         required=False,
-        choices=AccessRequestPerson.VERIFY_STATUS_CHOICES,
-        label="Verification Status",
+        choices=choices_with_labels(AccessRequestPerson.VERIFY_STATUS_CHOICES, ACCESS_REQUEST_PERSON_VERIFY_LABELS),
+        label="Trạng thái xác minh",
     )
     access_status = forms.MultipleChoiceField(
         required=False,
-        choices=AccessRequestPerson.ACCESS_STATUS_CHOICES,
-        label="Access Status",
+        choices=choices_with_labels(AccessRequestPerson.ACCESS_STATUS_CHOICES, ACCESS_REQUEST_PERSON_ACCESS_LABELS),
+        label="Trạng thái vào ra",
     )
     location_id = DynamicModelMultipleChoiceField(
         queryset=Location.objects.all(),
         required=False,
-        label="Location",
+        label="Vị trí",
     )
     tag = TagFilterField(model)
 
@@ -609,16 +799,16 @@ class AccessRequestPersonBulkEditForm(NetBoxModelBulkEditForm):
     request_user = None
     selected_persons_queryset = None
 
-    title = forms.CharField(required=False, label="Title")
-    phone = forms.CharField(required=False, label="Phone")
+    title = forms.CharField(required=False, label="Chức danh")
+    phone = forms.CharField(required=False, label="Số điện thoại")
     location = DynamicModelChoiceField(
         queryset=Location.objects.all(),
         required=False,
-        label="Location",
+        label="Vị trí",
     )
     description = forms.CharField(
         required=False,
-        label="Description",
+        label="Mô tả",
         widget=forms.Textarea(attrs={"rows": 3}),
     )
 
@@ -632,7 +822,7 @@ class AccessRequestPersonBulkEditForm(NetBoxModelBulkEditForm):
             "add_tags",
             "remove_tags",
             "changelog_message",
-            name="Access Request Person",
+            name="Đối tượng vào ra",
         ),
     )
 
@@ -649,6 +839,7 @@ class AccessRequestPersonBulkEditForm(NetBoxModelBulkEditForm):
                 self.fields["location"].widget.add_query_param("site_id", str(site_ids[0]))
 
     def _selected_persons_queryset(self):
+        """Dùng selected queryset để bulk edit Location chỉ trong cùng Site."""
         if self.__class__.selected_persons_queryset is not None:
             return self.__class__.selected_persons_queryset
 
@@ -671,7 +862,7 @@ class AccessRequestPersonBulkEditForm(NetBoxModelBulkEditForm):
         cleaned_data = super().clean()
         location = self.cleaned_data.get("location")
         if location and self._selected_persons_queryset().exclude(request__site=location.site).exists():
-            self.add_error("location", "Selected Location must belong to every selected Access Request Site.")
+            self.add_error("location", "Vị trí đã chọn phải thuộc địa điểm của tất cả phiếu yêu cầu được chọn.")
         return cleaned_data
 
 
@@ -684,13 +875,13 @@ class AccessRequestPersonImportForm(UploadFileFormMixin, NetBoxModelImportForm):
         queryset=AccessRequest.objects.all(),
         required=False,
         to_field_name="id",
-        help_text="Access Request ID. Optional when importing from an Access Request detail tab.",
+        help_text="ID phiếu yêu cầu. Có thể bỏ qua khi import từ tab chi tiết phiếu yêu cầu.",
     )
     location = CSVModelChoiceField(
         queryset=Location.objects.all(),
         required=False,
         to_field_name="id",
-        help_text="Location ID.",
+        help_text="ID vị trí.",
     )
 
     class Meta:
@@ -699,6 +890,16 @@ class AccessRequestPersonImportForm(UploadFileFormMixin, NetBoxModelImportForm):
             "request", "identity_code", "full_name", "organization",
             "title", "phone", "location", "description",
         )
+        labels = {
+            "request": "Phiếu yêu cầu vào ra",
+            "identity_code": "CCCD/CMND",
+            "full_name": "Họ tên",
+            "organization": "Đơn vị",
+            "title": "Chức danh",
+            "phone": "Số điện thoại",
+            "location": "Vị trí",
+            "description": "Mô tả",
+        }
 
     def __init__(self, *args, **kwargs):
         self.request_user = kwargs.pop("request_user", None) or self.__class__.request_user
@@ -712,13 +913,13 @@ class AccessRequestPersonImportForm(UploadFileFormMixin, NetBoxModelImportForm):
             )
         if self.scoped_request_id:
             self.fields["request"].queryset = self.fields["request"].queryset.filter(pk=self.scoped_request_id)
-        self.fields[self.upload_file_field_name].help_text = "JSON attachment payload created by the upload widget."
+        self.fields[self.upload_file_field_name].help_text = "Payload JSON file đính kèm được tạo bởi widget upload."
+        translate_import_common_fields(self)
 
     def clean(self):
         super().clean()
         upload_files = self.cleaned_data.get(self.upload_file_field_name, "[]")
-        if not upload_payload_has_valid_file(upload_files, model_name=self.upload_file_model_name):
-            self.add_error(self.upload_file_field_name, "At least one attachment is required.")
+        add_required_upload_error(self, upload_files)
 
         access_request = self.cleaned_data.get("request")
         if access_request is None and self.scoped_request_id:
@@ -726,13 +927,13 @@ class AccessRequestPersonImportForm(UploadFileFormMixin, NetBoxModelImportForm):
                 access_request = self.fields["request"].queryset.get(pk=self.scoped_request_id)
                 self.cleaned_data["request"] = access_request
             except AccessRequest.DoesNotExist:
-                self.add_error("request", "Scoped access request is not available.")
+                self.add_error("request", ACCESS_REQUEST_PERSON_SCOPED_REQUEST_UNAVAILABLE_MESSAGE)
         elif access_request is None:
-            self.add_error("request", "Access Request is required.")
+            self.add_error("request", ACCESS_REQUEST_REQUIRED_MESSAGE)
         if self.request_user is not None and access_request and not user_can_access_request(self.request_user, access_request):
-            self.add_error("request", "You do not have permission to import persons to this access request.")
+            self.add_error("request", ACCESS_REQUEST_PERSON_IMPORT_SCOPE_DENIED_MESSAGE)
         if access_request and not access_request.can_guest_edit:
-            self.add_error("request", "Persons cannot be imported after an access request is accepted or completed.")
+            self.add_error("request", ACCESS_REQUEST_PERSON_IMPORT_LOCKED_MESSAGE)
         return self.cleaned_data
 
     def clean_identity_code(self):

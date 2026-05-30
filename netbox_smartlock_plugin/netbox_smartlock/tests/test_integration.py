@@ -172,7 +172,7 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         response = self.client.get(reverse("plugins:netbox_smartlock:assetgroup_bulk_import"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Asset Group Bulk Import")
+        self.assertContains(response, "Import Nhóm tài sản")
 
     def test_assetgroup_list_does_not_render_missing_import_url(self):
         self.login()
@@ -317,7 +317,7 @@ class SmartLockPermissionTest(SmartLockIntegrationTestBase):
         response = self.client.get(reverse("plugins:netbox_smartlock:smartlock_bulk_import"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Smart Lock Bulk Import")
+        self.assertContains(response, "Import Khóa thông minh")
 
     def test_core_import_rejects_out_of_scope_dcim_rack_lookup(self):
         other_region = Region.objects.create(name="Restricted Region Import", slug="restricted-region-import")
