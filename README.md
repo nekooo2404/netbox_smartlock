@@ -14,8 +14,7 @@ Plugin NetBox để quản lý tài sản, thiết bị Smart Lock và quy trìn
 
 - Quản lý `Nhóm tài sản`.
 - Quản lý `Tài sản` liên kết với `Device` của NetBox.
-- Label UI cho thiết bị hiển thị là `Thiết bị`, không dùng hậu tố.
-- Tài sản dùng dữ liệu thiết bị NetBox cho Site, Location, Rack, loại thiết bị, hãng sản xuất, serial và asset tag.
+- Tài sản dùng dữ liệu NetBox cho Site, Location, Rack, loại thiết bị, hãng sản xuất, serial và asset tag.
 - Hỗ trợ lọc, tìm kiếm, `Configure Table`, import/export CSV mặc định của NetBox và export Excel.
 - Hỗ trợ file đính kèm qua upload plugin.
 
