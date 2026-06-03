@@ -1,0 +1,99 @@
+{% extends 'generic/object.html' %}
+
+{% block breadcrumbs %}
+  <li class="breadcrumb-item">
+    <a href="{% url 'plugins:netbox_smartlock:accessrequestperson_list' %}">Đối tượng vào ra</a>
+  </li>
+{% endblock breadcrumbs %}
+
+{% block tabs %}
+  <ul class="nav nav-tabs" role="presentation">
+    <li class="nav-item">
+      <a class="nav-link{% if not tab %} active{% endif %}" href="{{ object.get_absolute_url }}">Đối tượng vào ra</a>
+    </li>
+  </ul>
+{% endblock tabs %}
+
+{% block extra_controls %}
+  {% if can_manage_access_request_persons and object.can_admin_verify %}
+    <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_verify_valid' pk=object.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-success">
+        <i class="mdi mdi-check"></i> Hợp lệ
+      </button>
+    </form>
+    <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_verify_invalid' pk=object.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i class="mdi mdi-close"></i> Không hợp lệ
+      </button>
+    </form>
+  {% endif %}
+  {% if can_manage_access_request_persons and object.can_mark_in %}
+    <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_in' pk=object.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary">
+        <i class="mdi mdi-login"></i> In
+      </button>
+    </form>
+  {% endif %}
+  {% if can_manage_access_request_persons and object.can_mark_out %}
+    <form method="post" action="{% url 'plugins:netbox_smartlock:accessrequestperson_out' pk=object.pk %}" class="d-inline">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-secondary">
+        <i class="mdi mdi-logout"></i> Out
+      </button>
+    </form>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col-md-6">
+    <div class="card">
+      <h5 class="card-header">Đối tượng vào ra</h5>
+      <div class="card-body">
+        <table class="table table-hover attr-table">
+          <tr><th scope="row">Họ tên</th><td>{{ object.full_name }}</td></tr>
+          <tr><th scope="row">CCCD/CMND</th><td>{{ object.identity_code }}</td></tr>
+          <tr><th scope="row">Đơn vị</th><td>{{ object.organization }}</td></tr>
+          <tr><th scope="row">Chức danh</th><td>{{ object.title|default:"-" }}</td></tr>
+          <tr><th scope="row">Số điện thoại</th><td>{{ object.phone|default:"-" }}</td></tr>
+          <tr><th scope="row">Xác minh</th><td>{{ object.verify_status_label }}</td></tr>
+          <tr><th scope="row">Trạng thái vào ra</th><td>{{ object.access_status_label }}</td></tr>
+          <tr><th scope="row">Mô tả</th><td>{{ object.description|default:"-" }}</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <h5 class="card-header">Phạm vi và file đính kèm</h5>
+      <div class="card-body">
+        <table class="table table-hover attr-table">
+          <tr><th scope="row">Phiếu yêu cầu</th><td>{% if object.request %}<a href="{{ object.request.get_absolute_url }}">{{ object.request }}</a>{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Vị trí</th><td>{% if object.location %}<a href="{{ object.location.get_absolute_url }}">{{ object.location }}</a>{% else %}-{% endif %}</td></tr>
+          <tr>
+            <th scope="row">File đính kèm</th>
+            <td>
+              {% if uploaded_files %}
+                <ul class="list-unstyled mb-0">
+                  {% for file in uploaded_files %}
+                    <li>
+                      <a href="{{ file.file.url }}" target="_blank" rel="noopener">
+                        {{ file.file_name|default:file.file.name }}
+                      </a>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

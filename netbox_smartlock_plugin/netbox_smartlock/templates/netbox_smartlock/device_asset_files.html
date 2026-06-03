@@ -1,0 +1,27 @@
+{% extends 'netbox_smartlock/object_edit.html' %}
+
+{% block title %}
+  File đính kèm tài sản {{ object }}
+{% endblock title %}
+
+{% block breadcrumbs %}
+  <li class="breadcrumb-item">
+    <a href="{% url 'plugins:netbox_smartlock:device_asset_list' %}">Tài sản</a>
+  </li>
+  <li class="breadcrumb-item">
+    <a href="{{ object.get_absolute_url }}">{{ object }}</a>
+  </li>
+{% endblock breadcrumbs %}
+
+{% block tabs %}
+  <ul class="nav nav-tabs">
+    <li class="nav-item" role="presentation">
+      <a class="nav-link" href="{{ object.get_absolute_url }}">Tài sản</a>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="edit-form-tab" data-bs-toggle="tab" data-bs-target="#edit-form" type="button" role="tab" aria-controls="edit-form" aria-selected="true">
+        File đính kèm
+      </button>
+    </li>
+  </ul>
+{% endblock tabs %}

@@ -1,0 +1,18 @@
+<div class="card mb-3">
+  <h2 class="card-header">File đính kèm tài sản</h2>
+  <div class="card-body">
+    {% if uploaded_files %}
+      <ul class="list-unstyled mb-0">
+        {% for file in uploaded_files %}
+          <li>
+            <a href="{{ file.file.url }}" target="_blank" rel="noopener">
+              {{ file.file_name|default:file.file.name }}
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <span class="text-muted">Chưa có file đính kèm.</span>
+    {% endif %}
+  </div>
+</div>

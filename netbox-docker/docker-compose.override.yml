@@ -1,0 +1,35 @@
+# docker-compose.override.yml — Dev environment cho NetBox plugin
+# Docker Compose tự động merge file này với docker-compose.yml
+
+services:
+  netbox: &netbox
+    # Build custom image thay vì pull image sẵn.
+    # context = thư mục cha (netbox_smartlock/) để COPY được cả hai subdir.
+    build:
+      context: ..
+      dockerfile: netbox-docker/Dockerfile.plugin
+      args:
+        FROM: ${NETBOX_PLUGIN_BASE_IMAGE:-docker.io/netboxcommunity/netbox:v4.6-5.0.1}
+    image: netbox-smartlock-dev:latest
+    volumes:
+      - ./configuration:/etc/netbox/config:z,ro
+      - netbox-media-files:/opt/netbox/netbox/media:rw
+      - netbox-reports-files:/opt/netbox/netbox/reports:rw
+      - netbox-scripts-files:/opt/netbox/netbox/scripts:rw
+      # Mount plugin source — thay đổi Python code có hiệu lực ngay sau restart container
+      - ../netbox_smartlock_plugin:/opt/netbox/plugin_src:z,ro
+      - ../upload_file_plugin-production:/opt/netbox/upload_file_plugin_src:z,ro
+      - ../upload_file_plugin-production/upload_file_plugin/static/upload_file_plugin:/opt/netbox/netbox/static/upload_file_plugin:z,ro
+
+  netbox-worker:
+    <<: *netbox
+    ports: []
+    command:
+      - /opt/netbox/venv/bin/python
+      - /opt/netbox/netbox/manage.py
+      - rqworker
+    healthcheck:
+      test: ps -aux | grep -v grep | grep -q rqworker || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s

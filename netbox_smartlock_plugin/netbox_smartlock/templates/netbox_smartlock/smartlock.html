@@ -1,0 +1,99 @@
+{% extends 'generic/object.html' %}
+
+{% block breadcrumbs %}
+  <li class="breadcrumb-item">
+    <a href="{% url 'plugins:netbox_smartlock:smartlock_list' %}">Khóa thông minh</a>
+  </li>
+{% endblock breadcrumbs %}
+
+{% block subtitle %}{% endblock subtitle %}
+
+{% block tabs %}
+  <ul class="nav nav-tabs" role="presentation">
+    <li class="nav-item">
+      <a class="nav-link{% if not tab %} active{% endif %}" href="{{ object.get_absolute_url }}">Khóa thông minh</a>
+    </li>
+  </ul>
+{% endblock tabs %}
+
+{% block content %}
+<div class="row mb-3">
+  <div class="col-md-6">
+    <div class="card">
+      <h5 class="card-header">Thông tin chính</h5>
+      <div class="card-body">
+        <table class="table table-hover attr-table">
+          <tr><th scope="row">Tên</th><td>{{ object.name }}</td></tr>
+          <tr><th scope="row">Mã</th><td>{{ object.code|default:"-" }}</td></tr>
+          <tr><th scope="row">Nhóm tài sản</th><td>{% if object.asset_group %}<a href="{{ object.asset_group.get_absolute_url }}">{{ object.asset_group }}</a>{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Trạng thái</th><td>{{ smartlock_status_label }}</td></tr>
+          <tr><th scope="row">Người tạo</th><td>{{ created_by_name }}</td></tr>
+          <tr><th scope="row">Bảo hành</th><td>{{ warranty_state_badge }}</td></tr>
+          <tr><th scope="row">Mô tả</th><td>{{ object.description|default:"-" }}</td></tr>
+          <tr><th scope="row">Ghi chú</th><td>{{ object.comments|default:"-" }}</td></tr>
+          <tr>
+            <th scope="row">File đính kèm</th>
+            <td>
+              {% if uploaded_files %}
+                <ul class="list-unstyled mb-0">
+                  {% for file in uploaded_files %}
+                    <li>
+                      <a href="{{ file.file.url }}" target="_blank" rel="noopener">
+                        {{ file.file_name|default:file.file.name }}
+                      </a>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <h5 class="card-header">Vị trí và ánh xạ</h5>
+      <div class="card-body">
+        <table class="table table-hover attr-table">
+          <tr><th scope="row">Khu vực</th><td>{% if object.region %}<a href="{{ object.region.get_absolute_url }}">{{ object.region }}</a>{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Địa điểm</th><td>{% if object.site %}<a href="{{ object.site.get_absolute_url }}">{{ object.site }}</a>{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Vị trí</th><td>{% if object.location %}<a href="{{ object.location.get_absolute_url }}">{{ object.location }}</a>{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Tủ rack</th><td>{% if object.rack %}{{ object.rack }}{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Mặt tủ rack</th><td>{{ rack_face_label }}</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="row mb-3">
+  <div class="col-md-6">
+    <div class="card">
+      <h5 class="card-header">Thiết bị</h5>
+      <div class="card-body">
+        <table class="table table-hover attr-table">
+          <tr><th scope="row">Loại thiết bị</th><td>{{ object.device_type }}</td></tr>
+          <tr><th scope="row">Model</th><td>{{ object.model|default:"-" }}</td></tr>
+          <tr><th scope="row">Serial</th><td>{{ object.serial|default:"-" }}</td></tr>
+          <tr><th scope="row">Nhà sản xuất</th><td>{{ object.manufacturer|default:"-" }}</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <h5 class="card-header">Vòng đời</h5>
+      <div class="card-body">
+        <table class="table table-hover attr-table">
+          <tr><th scope="row">Ngày lắp đặt</th><td>{{ object.setup_date|default:"-" }}</td></tr>
+          <tr><th scope="row">Ngày mua</th><td>{{ object.bought_date|default:"-" }}</td></tr>
+          <tr><th scope="row">Thời hạn bảo hành</th><td>{% if object.warranty_period %}{{ object.warranty_period }} tháng{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Ngày hết hạn bảo hành</th><td>{{ object.warranty_expiration_date|default:"-" }}</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

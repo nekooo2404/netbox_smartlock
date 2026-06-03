@@ -1,0 +1,42 @@
+{% load static %}
+
+<div
+  class="nbx-upload"
+  data-upload-url="{% url 'plugins:upload_file_plugin:upload_file' %}"
+  data-delete-temp-url="{% url 'plugins:upload_file_plugin:delete_temp_file' %}"
+  data-object-id="{{ widget.object_id }}"
+  data-model-name="{{ widget.model_name }}"
+  data-valid-flag="{{ widget.valid_flg }}"
+  data-type-file="{{ widget.type_file }}"
+>
+  <input type="hidden" class="nbx-upload-all-files" name="{{ widget.name }}">
+  <input type="hidden" class="nbx-upload-uploaded-files" name="uploaded_files_json">
+  <input type="hidden" class="nbx-upload-has-changes" name="has_file_changes" value="false">
+  <input
+    type="file"
+    class="d-none nbx-upload-input"
+    name="files"
+    accept="{{ widget.accept }}"
+    multiple
+  >
+
+  <div class="input-group">
+    <button type="button" class="btn btn-outline-secondary nbx-upload-browse">
+      <i class="mdi mdi-paperclip"></i> Chọn file
+    </button>
+    <div class="form-control nbx-upload-dropzone">
+      <span class="text-muted">Kéo thả ảnh vào đây hoặc chọn file</span>
+    </div>
+  </div>
+
+  <div class="form-text">Ảnh được tải lên tạm thời và chỉ gắn vào đối tượng sau khi lưu. Hỗ trợ: jpg, jpeg, png, gif, webp, bmp. Giới hạn: 25MB mỗi file.</div>
+  <div class="alert alert-danger d-none mt-2 nbx-upload-errors"></div>
+  <div class="list-group mt-2 nbx-upload-list"></div>
+</div>
+
+{{ widget.initial_files_json|json_script:widget.initial_files_script_id }}
+<script src="{% static 'upload_file_plugin/js/upload_utils.js' %}"></script>
+<script src="{% static 'upload_file_plugin/js/upload_validation.js' %}"></script>
+<script src="{% static 'upload_file_plugin/js/upload_api.js' %}"></script>
+<script src="{% static 'upload_file_plugin/js/upload_render.js' %}"></script>
+<script src="{% static 'upload_file_plugin/js/upload_widget.js' %}"></script>
