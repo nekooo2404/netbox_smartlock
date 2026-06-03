@@ -273,6 +273,14 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         for response in (list_response, add_response, detail_response):
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, "Loại trừ khỏi visualization")
+        self.assertContains(
+            add_response,
+            "Khi được chọn: tất cả tài sản thuộc nhóm tài sản này sẽ không được thêm vào visualization.",
+        )
+        self.assertContains(
+            add_response,
+            "Khi không được chọn: tất cả tài sản thuộc nhóm tài sản này sẽ được thêm vào visualization.",
+        )
 
     def test_assetgroup_quick_search_matches_vietnamese_status_label(self):
         inactive_group = AssetGroup.objects.create(

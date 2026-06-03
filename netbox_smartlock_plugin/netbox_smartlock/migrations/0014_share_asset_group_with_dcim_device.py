@@ -73,18 +73,33 @@ DEVICE_ASSET_CUSTOM_FIELD_DEFINITIONS = (
 DEVICE_ASSET_CUSTOM_FIELD_NAMES = tuple(definition["name"] for definition in DEVICE_ASSET_CUSTOM_FIELD_DEFINITIONS)
 
 
-def get_object_type(ObjectType, model):
+def get_object_type(ObjectType, ContentType, model):
     manager = ObjectType.objects
+    object_type = manager.filter(
+        app_label=model._meta.app_label,
+        model=model._meta.model_name,
+    ).first()
+    if object_type is not None:
+        return object_type
+
+    content_type = ContentType.objects.filter(
+        app_label=model._meta.app_label,
+        model=model._meta.model_name,
+    ).first()
+    if content_type is not None:
+        return ObjectType.objects.create(
+            contenttype_ptr_id=content_type.pk,
+            app_label=content_type.app_label,
+            model=content_type.model,
+        )
+
     if hasattr(manager, "get_for_model"):
         try:
             return manager.get_for_model(model)
         except ObjectType.DoesNotExist:
             return None
 
-    return manager.filter(
-        app_label=model._meta.app_label,
-        model=model._meta.model_name,
-    ).first()
+    return None
 
 
 def custom_field_model_fields(CustomField):
@@ -163,12 +178,13 @@ def ensure_device_asset_status_choice_set(apps):
 
 def ensure_device_asset_custom_fields(apps, schema_editor):
     CustomField = apps.get_model("extras", "CustomField")
+    ContentType = apps.get_model("contenttypes", "ContentType")
     ObjectType = apps.get_model("core", "ObjectType")
     Device = apps.get_model("dcim", "Device")
     AssetGroup = apps.get_model("netbox_smartlock", "AssetGroup")
 
-    device_object_type = get_object_type(ObjectType, Device)
-    asset_group_object_type = get_object_type(ObjectType, AssetGroup)
+    device_object_type = get_object_type(ObjectType, ContentType, Device)
+    asset_group_object_type = get_object_type(ObjectType, ContentType, AssetGroup)
     if device_object_type is None or asset_group_object_type is None:
         return
 
@@ -200,10 +216,11 @@ def ensure_device_asset_custom_fields(apps, schema_editor):
 
 def remove_device_asset_custom_fields(apps, schema_editor):
     CustomField = apps.get_model("extras", "CustomField")
+    ContentType = apps.get_model("contenttypes", "ContentType")
     ObjectType = apps.get_model("core", "ObjectType")
     Device = apps.get_model("dcim", "Device")
 
-    device_object_type = get_object_type(ObjectType, Device)
+    device_object_type = get_object_type(ObjectType, ContentType, Device)
     if device_object_type is None:
         return
 

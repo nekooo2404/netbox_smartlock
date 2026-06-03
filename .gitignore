@@ -69,8 +69,6 @@ pip-wheel-metadata/
 *.log
 logs/
 
-# Local analysis / generated project maps
-.understand-anything/
 
 # Docker / local runtime artifacts
 netbox-docker/.env

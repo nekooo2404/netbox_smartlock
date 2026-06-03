@@ -166,6 +166,12 @@ def add_required_upload_error(form, upload_files, *, instance=None):
         form.add_error(form.upload_file_field_name, ACCESS_REQUEST_PERSON_FILE_REQUIRED_MESSAGE)
 
 
+ASSETGROUP_VISUALIZATION_HELP_TEXT = (
+    "Khi được chọn: tất cả tài sản thuộc nhóm tài sản này sẽ không được thêm vào visualization. "
+    "Khi không được chọn: tất cả tài sản thuộc nhóm tài sản này sẽ được thêm vào visualization."
+)
+
+
 class AssetGroupForm(UploadFileFormMixin, NetBoxModelForm):
     upload_file_model_name = "assetgroup"
     slug = SlugField()
@@ -189,6 +195,7 @@ class AssetGroupForm(UploadFileFormMixin, NetBoxModelForm):
         }
         help_texts = {
             "code": "Mã nhóm dùng cho nhập/xuất dữ liệu và đối soát.",
+            "exclude_from_visualization": ASSETGROUP_VISUALIZATION_HELP_TEXT,
         }
 
     def clean_name(self):
@@ -226,6 +233,7 @@ class AssetGroupImportForm(NetBoxModelImportForm):
     exclude_from_visualization = forms.BooleanField(
         required=False,
         label="Loại trừ khỏi visualization",
+        help_text=ASSETGROUP_VISUALIZATION_HELP_TEXT,
     )
     status = CSVChoiceField(
         choices=choices_with_labels(AssetGroup.STATUS_CHOICES, ASSET_GROUP_STATUS_LABELS),

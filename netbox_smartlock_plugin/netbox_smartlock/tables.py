@@ -1,8 +1,8 @@
 import django_tables2 as tables
 
 from django.urls import reverse
+from django.utils.html import format_html_join
 from django.utils.http import quote
-from django.utils.safestring import mark_safe
 from netbox.tables import NetBoxTable, columns
 
 from .mapping import get_warranty_state
@@ -20,6 +20,12 @@ from .ui import (
     warranty_state_badge,
 )
 from .upload_files import file_names_for_object
+
+
+DEVICE_ASSET_ACTIONS = (
+    ("change_asset", "device_asset_edit", "btn-warning", "Sửa", "mdi-pencil"),
+    ("delete_asset", "device_asset_delete", "btn-danger", "Xóa", "mdi-trash-can-outline"),
+)
 
 
 class GuestWorkflowActionsColumn(columns.ActionsColumn):
@@ -56,21 +62,16 @@ class DeviceAssetActionsColumn(columns.ActionsColumn):
         url_appendix = f"?return_url={quote(return_url)}" if return_url else ""
         buttons = []
 
-        if user is not None and user.has_perm("netbox_smartlock.change_asset", record):
-            edit_url = reverse("plugins:netbox_smartlock:device_asset_edit", kwargs={"pk": record.pk})
-            buttons.append(
-                f'<a class="btn btn-sm btn-warning" href="{edit_url}{url_appendix}" type="button" aria-label="Sửa">'
-                f'<i class="mdi mdi-pencil"></i></a>'
-            )
+        for permission, url_name, button_class, label, icon_class in DEVICE_ASSET_ACTIONS:
+            if user is not None and user.has_perm(f"netbox_smartlock.{permission}", record):
+                action_url = reverse(f"plugins:netbox_smartlock:{url_name}", kwargs={"pk": record.pk})
+                buttons.append((button_class, f"{action_url}{url_appendix}", label, icon_class))
 
-        if user is not None and user.has_perm("netbox_smartlock.delete_asset", record):
-            delete_url = reverse("plugins:netbox_smartlock:device_asset_delete", kwargs={"pk": record.pk})
-            buttons.append(
-                f'<a class="btn btn-sm btn-danger" href="{delete_url}{url_appendix}" type="button" aria-label="Xóa">'
-                f'<i class="mdi mdi-trash-can-outline"></i></a>'
-            )
-
-        return mark_safe("".join(buttons))
+        return format_html_join(
+            "",
+            '<a class="btn btn-sm {}" href="{}" type="button" aria-label="{}"><i class="mdi {}"></i></a>',
+            buttons,
+        )
 
 
 class AssetGroupTable(NetBoxTable):

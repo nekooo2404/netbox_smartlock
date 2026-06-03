@@ -1,4 +1,5 @@
 from django.test import SimpleTestCase
+from django.urls import reverse
 
 from netbox_smartlock.contracts import (
     SMARTLOCK_CUSTOM_EXPORT_PARAM,
@@ -9,6 +10,8 @@ from netbox_smartlock.contracts import (
 )
 from netbox_smartlock.exports import SmartLockExportService
 from netbox_smartlock.exports import excel_cell_value
+from netbox_smartlock.exports import AccessRequestExportService, AssetGroupExportService, DeviceAssetExportService
+from netbox_smartlock.tables import DeviceAssetActionsColumn
 
 
 class SmartLockImportExportContractTest(SimpleTestCase):
@@ -104,3 +107,44 @@ class SmartLockImportExportContractTest(SimpleTestCase):
         value = '<span class="badge text-bg-success">Còn bảo hành</span>'
 
         self.assertEqual(excel_cell_value(value), "Còn bảo hành")
+
+    def test_excel_export_services_keep_distinct_custom_params(self):
+        self.assertEqual(AssetGroupExportService.custom_export_param, "assetgroup_export")
+        self.assertEqual(DeviceAssetExportService.custom_export_param, "device_asset_export")
+        self.assertEqual(SmartLockExportService.custom_export_param, "smartlock_export")
+        self.assertEqual(AccessRequestExportService.custom_export_param, "accessrequest_export")
+
+        for service in (
+            AssetGroupExportService,
+            DeviceAssetExportService,
+            SmartLockExportService,
+            AccessRequestExportService,
+        ):
+            self.assertEqual(service.custom_export_value, "excel_report")
+
+
+class DeviceAssetActionsColumnContractTest(SimpleTestCase):
+    def test_device_asset_actions_escape_return_url_and_keep_permitted_actions(self):
+        class User:
+            def has_perm(self, permission, record):
+                return permission in {
+                    "netbox_smartlock.change_asset",
+                    "netbox_smartlock.delete_asset",
+                }
+
+        class Request:
+            user = User()
+            GET = {"return_url": '/dcim/devices/?q=<script>alert("x")</script>'}
+
+            def get_full_path(self):
+                return "/plugins/netbox-smartlock/assets/"
+
+        table = type("Table", (), {"context": {"request": Request()}})()
+        record = type("AssetRef", (), {"pk": 123})()
+
+        rendered = str(DeviceAssetActionsColumn().render(record, table))
+
+        self.assertIn(reverse("plugins:netbox_smartlock:device_asset_edit", kwargs={"pk": 123}), rendered)
+        self.assertIn(reverse("plugins:netbox_smartlock:device_asset_delete", kwargs={"pk": 123}), rendered)
+        self.assertIn("%3Cscript%3Ealert%28%22x%22%29%3C/script%3E", rendered)
+        self.assertNotIn("<script>", rendered)

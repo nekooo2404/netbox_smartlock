@@ -38,6 +38,44 @@ def excel_cell_value(value):
 class ExcelTableExportMixin:
     excel_filename = "netbox_export.xlsx"
     worksheet_title = "Export"
+    custom_export_param = None
+    custom_export_value = "excel_report"
+
+    @classmethod
+    def build_excel_export_url(cls, request):
+        if not cls.custom_export_param:
+            raise NotImplementedError("custom_export_param must be configured for Excel exports.")
+
+        excel_params = request.GET.copy()
+        excel_params.pop("export", None)
+        excel_params[cls.custom_export_param] = cls.custom_export_value
+        return f"{request.path}?{excel_params.urlencode()}"
+
+    @classmethod
+    def build_control_urls(cls, request):
+        return {
+            "excel_export_url": cls.build_excel_export_url(request),
+        }
+
+    @classmethod
+    def is_custom_export_request(cls, request):
+        return bool(cls.custom_export_param and request.GET.get(cls.custom_export_param) == cls.custom_export_value)
+
+    @classmethod
+    def dispatch_custom_export(cls, request, *, view, queryset):
+        if not cls.is_custom_export_request(request):
+            return None
+
+        table, selected_columns = cls.build_export_table(request, view, queryset)
+        return cls.export_excel_report(table, selected_columns)
+
+    @staticmethod
+    def build_export_table(request, view, queryset):
+        actions = view.get_permitted_actions(request.user)
+        has_table_actions = any(action.multi for action in actions)
+        table = view.get_table(queryset, request, has_table_actions)
+        selected_columns = [name for name, _ in table.selected_columns]
+        return table, selected_columns
 
     @classmethod
     def export_excel_report(cls, table, columns=None):
@@ -84,95 +122,30 @@ class ExcelTableExportMixin:
 class AssetGroupExportService(ExcelTableExportMixin):
     excel_filename = "netbox_asset_groups.xlsx"
     worksheet_title = "Nhóm tài sản"
-
-    @classmethod
-    def build_control_urls(cls, request):
-        excel_params = request.GET.copy()
-        excel_params.pop("export", None)
-        excel_params[ASSETGROUP_CUSTOM_EXPORT_PARAM] = ASSETGROUP_EXPORT_EXCEL_REPORT
-
-        return {
-            "excel_export_url": f"{request.path}?{excel_params.urlencode()}",
-        }
-
-    @staticmethod
-    def is_custom_export_request(request):
-        return request.GET.get(ASSETGROUP_CUSTOM_EXPORT_PARAM) == ASSETGROUP_EXPORT_EXCEL_REPORT
-
-    @classmethod
-    def dispatch_custom_export(cls, request, *, view, queryset):
-        if not cls.is_custom_export_request(request):
-            return None
-
-        actions = view.get_permitted_actions(request.user)
-        has_table_actions = any(action.multi for action in actions)
-        table = view.get_table(queryset, request, has_table_actions)
-        selected_columns = [name for name, _ in table.selected_columns]
-        return cls.export_excel_report(table, selected_columns)
+    custom_export_param = ASSETGROUP_CUSTOM_EXPORT_PARAM
+    custom_export_value = ASSETGROUP_EXPORT_EXCEL_REPORT
 
 
 class DeviceAssetExportService(ExcelTableExportMixin):
     excel_filename = "netbox_assets.xlsx"
     worksheet_title = "Tài sản"
-
-    @classmethod
-    def build_control_urls(cls, request):
-        excel_params = request.GET.copy()
-        excel_params.pop("export", None)
-        excel_params[DEVICE_ASSET_CUSTOM_EXPORT_PARAM] = DEVICE_ASSET_EXPORT_EXCEL_REPORT
-
-        return {
-            "excel_export_url": f"{request.path}?{excel_params.urlencode()}",
-        }
-
-    @staticmethod
-    def is_custom_export_request(request):
-        return request.GET.get(DEVICE_ASSET_CUSTOM_EXPORT_PARAM) == DEVICE_ASSET_EXPORT_EXCEL_REPORT
-
-    @classmethod
-    def dispatch_custom_export(cls, request, *, view, queryset):
-        if not cls.is_custom_export_request(request):
-            return None
-
-        actions = view.get_permitted_actions(request.user)
-        has_table_actions = any(action.multi for action in actions)
-        table = view.get_table(queryset, request, has_table_actions)
-        selected_columns = [name for name, _ in table.selected_columns]
-        return cls.export_excel_report(table, selected_columns)
+    custom_export_param = DEVICE_ASSET_CUSTOM_EXPORT_PARAM
+    custom_export_value = DEVICE_ASSET_EXPORT_EXCEL_REPORT
 
 
-class SmartLockExportService:
+class SmartLockExportService(ExcelTableExportMixin):
     excel_filename = "netbox_smartlocks.xlsx"
     core_csv_filename = "netbox_smartlocks.csv"
+    worksheet_title = "Khóa thông minh"
+    custom_export_param = SMARTLOCK_CUSTOM_EXPORT_PARAM
+    custom_export_value = SMARTLOCK_EXPORT_EXCEL_REPORT
 
     @classmethod
     def build_control_urls(cls, request):
-        excel_params = request.GET.copy()
-        excel_params.pop("export", None)
-        excel_params[SMARTLOCK_CUSTOM_EXPORT_PARAM] = SMARTLOCK_EXPORT_EXCEL_REPORT
-
         return {
-            "excel_export_url": f"{request.path}?{excel_params.urlencode()}",
+            "excel_export_url": cls.build_excel_export_url(request),
             "import_url": reverse("plugins:netbox_smartlock:smartlock_import"),
         }
-
-    @classmethod
-    def is_custom_export_request(cls, request):
-        return request.GET.get(SMARTLOCK_CUSTOM_EXPORT_PARAM) == SMARTLOCK_EXPORT_EXCEL_REPORT
-
-    @classmethod
-    def dispatch_custom_export(cls, request, *, view, queryset):
-        """Chỉ xử lý export Excel bổ sung; export CSV lõi vẫn đi theo cơ chế NetBox."""
-        export_type = request.GET.get(SMARTLOCK_CUSTOM_EXPORT_PARAM)
-
-        if export_type == SMARTLOCK_EXPORT_EXCEL_REPORT:
-            actions = view.get_permitted_actions(request.user)
-            has_table_actions = any(action.multi for action in actions)
-            table = view.get_table(queryset, request, has_table_actions)
-            selected_columns = [name for name, _ in table.selected_columns]
-            return cls.export_excel_report(table, selected_columns)
-
-        return None
 
     @classmethod
     def export_core_csv(cls, queryset, *, filename=None, delimiter=None):
@@ -240,7 +213,7 @@ class SmartLockExportService:
 
         workbook = Workbook()
         worksheet = workbook.active
-        worksheet.title = "Khóa thông minh"
+        worksheet.title = cls.worksheet_title
 
         for row_index, row in enumerate(rows, start=1):
             worksheet.append([excel_cell_value(value) for value in row])
@@ -263,81 +236,8 @@ class SmartLockExportService:
         response["Content-Disposition"] = f'attachment; filename="{cls.excel_filename}"'
         return response
 
-    @staticmethod
-    def _excluded_excel_columns(table, columns=None):
-        exclude_columns = {"pk", "actions"}
-        all_columns = [col_name for col_name, _ in table.selected_columns + table.available_columns]
-        if columns:
-            exclude_columns.update({col for col in all_columns if col not in columns})
-        return exclude_columns
 
-
-class AccessRequestExportService:
+class AccessRequestExportService(ExcelTableExportMixin):
     excel_filename = "netbox_access_requests.xlsx"
-
-    @classmethod
-    def build_control_urls(cls, request):
-        excel_params = request.GET.copy()
-        excel_params.pop("export", None)
-        excel_params["accessrequest_export"] = "excel_report"
-
-        return {
-            "excel_export_url": f"{request.path}?{excel_params.urlencode()}",
-        }
-
-    @staticmethod
-    def is_custom_export_request(request):
-        return request.GET.get("accessrequest_export") == "excel_report"
-
-    @classmethod
-    def dispatch_custom_export(cls, request, *, view, queryset):
-        if not cls.is_custom_export_request(request):
-            return None
-
-        actions = view.get_permitted_actions(request.user)
-        has_table_actions = any(action.multi for action in actions)
-        table = view.get_table(queryset, request, has_table_actions)
-        selected_columns = [name for name, _ in table.selected_columns]
-        return cls.export_excel_report(table, selected_columns)
-
-    @classmethod
-    def export_excel_report(cls, table, columns=None):
-        from openpyxl import Workbook
-        from openpyxl.styles import Font
-
-        # Queryset truyền vào đã được scope theo quyền, nên export không tự mở rộng dữ liệu.
-        exclude_columns = cls._excluded_excel_columns(table, columns=columns)
-        rows = list(table.as_values(exclude_columns=exclude_columns))
-
-        workbook = Workbook()
-        worksheet = workbook.active
-        worksheet.title = "Phiếu yêu cầu"
-
-        for row_index, row in enumerate(rows, start=1):
-            worksheet.append([excel_cell_value(value) for value in row])
-            if row_index == 1:
-                for cell in worksheet[row_index]:
-                    cell.font = Font(bold=True)
-
-        for column_cells in worksheet.columns:
-            max_length = max(len(str(cell.value or "")) for cell in column_cells)
-            worksheet.column_dimensions[column_cells[0].column_letter].width = min(max(max_length + 2, 12), 60)
-
-        buffer = BytesIO()
-        workbook.save(buffer)
-        buffer.seek(0)
-
-        response = HttpResponse(
-            buffer.getvalue(),
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        response["Content-Disposition"] = f'attachment; filename="{cls.excel_filename}"'
-        return response
-
-    @staticmethod
-    def _excluded_excel_columns(table, columns=None):
-        exclude_columns = {"pk", "actions"}
-        all_columns = [col_name for col_name, _ in table.selected_columns + table.available_columns]
-        if columns:
-            exclude_columns.update({col for col in all_columns if col not in columns})
-        return exclude_columns
+    worksheet_title = "Phiếu yêu cầu"
+    custom_export_param = "accessrequest_export"
