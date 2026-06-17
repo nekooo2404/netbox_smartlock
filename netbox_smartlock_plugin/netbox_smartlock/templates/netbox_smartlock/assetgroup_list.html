@@ -1,7 +1,8 @@
 {% extends 'netbox_smartlock/object_list.html' %}
 
 {% block extra_controls %}
-  <a href="{{ excel_export_url }}" class="btn btn-success">
+  {{ block.super }}
+  <a href="{{ excel_export_url }}" class="btn btn-outline-secondary">
     <i class="mdi mdi-file-excel"></i> Xuất Excel
   </a>
 {% endblock %}

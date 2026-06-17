@@ -1,8 +1,5 @@
 import django_tables2 as tables
 
-from django.urls import reverse
-from django.utils.html import format_html_join
-from django.utils.http import quote
 from netbox.tables import NetBoxTable, columns
 
 from .mapping import get_warranty_state
@@ -20,12 +17,6 @@ from .ui import (
     warranty_state_badge,
 )
 from .upload_files import file_names_for_object
-
-
-DEVICE_ASSET_ACTIONS = (
-    ("change_asset", "device_asset_edit", "btn-warning", "Sửa", "mdi-pencil"),
-    ("delete_asset", "device_asset_delete", "btn-danger", "Xóa", "mdi-trash-can-outline"),
-)
 
 
 class GuestWorkflowActionsColumn(columns.ActionsColumn):
@@ -50,28 +41,6 @@ class GuestWorkflowActionsColumn(columns.ActionsColumn):
             return super().render(record, table, **kwargs)
         finally:
             self.actions = original_actions
-
-
-class DeviceAssetActionsColumn(columns.ActionsColumn):
-    """Giữ action trong màn Tài sản đi qua plugin để áp validation DICM."""
-
-    def render(self, record, table, **kwargs):
-        request = getattr(table, "context", {}).get("request") if getattr(table, "context", None) else None
-        user = getattr(request, "user", None)
-        return_url = request.GET.get("return_url", request.get_full_path()) if request else ""
-        url_appendix = f"?return_url={quote(return_url)}" if return_url else ""
-        buttons = []
-
-        for permission, url_name, button_class, label, icon_class in DEVICE_ASSET_ACTIONS:
-            if user is not None and user.has_perm(f"netbox_smartlock.{permission}", record):
-                action_url = reverse(f"plugins:netbox_smartlock:{url_name}", kwargs={"pk": record.pk})
-                buttons.append((button_class, f"{action_url}{url_appendix}", label, icon_class))
-
-        return format_html_join(
-            "",
-            '<a class="btn btn-sm {}" href="{}" type="button" aria-label="{}"><i class="mdi {}"></i></a>',
-            buttons,
-        )
 
 
 class AssetGroupTable(NetBoxTable):
@@ -181,7 +150,7 @@ class DeviceAssetTable(NetBoxTable):
     last_updated = tables.DateTimeColumn(verbose_name="Thời gian cập nhật")
     uploaded_file_count = tables.Column(verbose_name="Số file", orderable=False)
     tags = columns.TagColumn(url_name="plugins:netbox_smartlock:device_asset_list")
-    actions = DeviceAssetActionsColumn()
+    actions = columns.ActionsColumn()
 
     def render_status(self, record):
         return label_for(ASSET_STATUS_LABELS, record.status)
