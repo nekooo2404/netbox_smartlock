@@ -141,6 +141,113 @@ NetBox mặc định chạy tại:
 http://localhost:8000
 ```
 
+## Keycloak SSO Local
+
+Repo co san overlay `netbox-docker/docker-compose.keycloak.yml` de chay Keycloak lam IAM hub cho moi truong dev.
+Mo hinh local la LDAP -> Keycloak -> OIDC -> NetBox. NetBox khong ket noi LDAP truc tiep.
+
+Overlay nay import realm `netbox-dev`, client OIDC `netbox-dev`, role `dcim-admin`/`dcim-guest`, va group Keycloak `Admin`/`Guest` de map xuong NetBox.
+LDAP dev service seed user noi bo `ldap-admin`/`ldap-guest` va group LDAP `dcim-admin`/`dcim-guest`. Day la nguon user noi bo chuan; NetBox khong dang nhap truc tiep LDAP va khong can user local trong Keycloak cho app.
+
+Chay NetBox kem Keycloak:
+
+```powershell
+cd netbox-docker
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml up -d --build
+```
+
+Ap cau hinh LDAP federation, role/group mapper va sync LDAP vao Keycloak:
+
+```powershell
+cd netbox-docker
+powershell -ExecutionPolicy Bypass -File .\keycloak\configure-ldap-oidc.ps1
+```
+
+Bootstrap NetBox RBAC cho group `Admin`/`Guest` duoc sync tu Keycloak:
+
+```powershell
+cd netbox-docker
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_bootstrap_rbac
+```
+
+Keycloak Admin Console:
+
+```text
+http://keycloak.local:8080
+```
+
+Tai khoan dev mac dinh:
+
+```text
+admin / admin
+```
+
+User dang nhap NetBox mau di qua LDAP -> Keycloak -> OIDC:
+
+```text
+ldap-admin / admin
+ldap-guest / guest
+```
+
+NetBox:
+
+```text
+http://localhost:8000
+```
+
+Cau hinh OIDC duoc khai bao trong `netbox-docker/env/netbox.env.example`.
+Voi realm import mac dinh, client secret dev la:
+
+```text
+netbox-dev-secret
+```
+
+Neu tao lai client secret trong Keycloak, cap nhat bien nay trong `netbox-docker/env/netbox.env`:
+
+```env
+SOCIAL_AUTH_OIDC_SECRET=<client-secret-moi>
+```
+
+Callback URL cua NetBox trong Keycloak phai gom:
+
+```text
+http://localhost:8000/oauth/complete/oidc/
+http://netbox.localtest.me:8000/oauth/complete/oidc/
+```
+
+De kiem tra NetBox container doc duoc discovery endpoint cua Keycloak:
+
+```powershell
+cd netbox-docker
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox curl http://keycloak.local:8080/realms/netbox-dev/.well-known/openid-configuration
+```
+
+Luu y phan quyen: plugin SmartLock dang dung group NetBox ten `Admin` cho cac thao tac quan tri phieu va danh muc tai san/Smart Lock; group `Guest` cho nguoi dung khach/doi tac.
+Keycloak la noi map role/group. NetBox chi doc JWT OIDC claim `groups`/`roles` qua pipeline `netbox_smartlock.auth_pipeline.sync_keycloak_groups` va tu dong dong bo cac group trong allow-list:
+
+```env
+KEYCLOAK_GROUP_SYNC_ENABLED=True
+KEYCLOAK_GROUP_SYNC_GROUPS=Admin Guest
+KEYCLOAK_GROUP_SYNC_REMOVE=True
+KEYCLOAK_GROUP_SYNC_GROUP_MAP=dcim-admin=Admin dcim-guest=Guest
+KEYCLOAK_GROUP_SYNC_ROLE_MAP=dcim-admin=Admin dcim-guest=Guest
+```
+
+Pipeline chi quan ly cac group nam trong `KEYCLOAK_GROUP_SYNC_GROUPS`; cac group NetBox local khac duoc giu nguyen. Neu token/userinfo khong co claim `groups` hoac `roles`, pipeline bo qua sync de tranh xoa nham quyen.
+
+Plugin API SmartLock nhan Bearer JWT tu Keycloak tren cac endpoint `/api/plugins/smartlock/...`; token phai co issuer realm `netbox-dev` va client `netbox-dev`.
+
+Quyen Region/Site/Location/Rack/Device va cac object plugin duoc NetBox enforce bang ObjectPermission. Command `smartlock_bootstrap_rbac` cap scope mac dinh; neu can scope theo khach hang/LDAP group rieng, tao ObjectPermission co `constraints` theo Region/Site tuong ung trong NetBox hoac mo rong claim Keycloak rieng cho domain do.
+
+Neu database dev da tung dang nhap OIDC truoc khi cau hinh on dinh, co the co user trung email. Kiem tra association OIDC:
+
+```powershell
+cd netbox-docker
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell -c "from social_django.models import UserSocialAuth; print(list(UserSocialAuth.objects.values_list('provider','uid','user__username','user__email')))"
+```
+
+Group se duoc sync vao user dang duoc association OIDC tro den, khong nhat thiet la user local cung email tao thu cong tu truoc.
+
 ## Migration
 
 Chạy migration NetBox và plugin:

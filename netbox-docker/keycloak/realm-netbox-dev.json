@@ -1,0 +1,247 @@
+{
+  "realm": "netbox-dev",
+  "enabled": true,
+  "displayName": "NetBox SmartLock Dev",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "groups": [
+    {
+      "name": "Admin",
+      "realmRoles": [
+        "dcim-admin"
+      ]
+    },
+    {
+      "name": "Guest",
+      "realmRoles": [
+        "dcim-guest"
+      ]
+    },
+    {
+      "name": "dcim-admin",
+      "realmRoles": [
+        "dcim-admin"
+      ]
+    },
+    {
+      "name": "dcim-guest",
+      "realmRoles": [
+        "dcim-guest"
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "dcim-admin",
+        "description": "DCIM administrator mapped to NetBox Admin group"
+      },
+      {
+        "name": "dcim-guest",
+        "description": "DCIM guest mapped to NetBox Guest group"
+      }
+    ]
+  },
+  "users": [],
+  "clients": [
+    {
+      "clientId": "netbox-dev",
+      "name": "NetBox Dev",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "netbox-dev-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "http://localhost:8000/oauth/complete/oidc/",
+        "http://netbox.localtest.me:8000/oauth/complete/oidc/"
+      ],
+      "webOrigins": [
+        "http://localhost:8000",
+        "http://netbox.localtest.me:8000"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8000/*##http://netbox.localtest.me:8000/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups",
+            "jsonType.label": "String",
+            "multivalued": "true"
+          }
+        },
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "claim.name": "roles",
+            "id.token.claim": "true",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.storage.UserStorageProvider": [
+      {
+        "id": "ldap-internal",
+        "name": "ldap-internal",
+        "providerId": "ldap",
+        "providerType": "org.keycloak.storage.UserStorageProvider",
+        "parentId": "netbox-dev",
+        "config": {
+          "enabled": [
+            "true"
+          ],
+          "priority": [
+            "0"
+          ],
+          "fullSyncPeriod": [
+            "-1"
+          ],
+          "changedSyncPeriod": [
+            "-1"
+          ],
+          "cachePolicy": [
+            "DEFAULT"
+          ],
+          "editMode": [
+            "READ_ONLY"
+          ],
+          "importEnabled": [
+            "true"
+          ],
+          "syncRegistrations": [
+            "false"
+          ],
+          "vendor": [
+            "other"
+          ],
+          "connectionUrl": [
+            "ldap://ldap:389"
+          ],
+          "connectionPooling": [
+            "true"
+          ],
+          "authType": [
+            "simple"
+          ],
+          "bindDn": [
+            "cn=admin,dc=example,dc=org"
+          ],
+          "bindCredential": [
+            "admin"
+          ],
+          "usersDn": [
+            "ou=users,dc=example,dc=org"
+          ],
+          "usernameLDAPAttribute": [
+            "uid"
+          ],
+          "rdnLDAPAttribute": [
+            "uid"
+          ],
+          "uuidLDAPAttribute": [
+            "entryUUID"
+          ],
+          "userObjectClasses": [
+            "inetOrgPerson, organizationalPerson"
+          ],
+          "searchScope": [
+            "1"
+          ],
+          "pagination": [
+            "false"
+          ],
+          "batchSizeForSync": [
+            "1000"
+          ],
+          "validatePasswordPolicy": [
+            "false"
+          ],
+          "trustEmail": [
+            "true"
+          ],
+          "useTruststoreSpi": [
+            "ldapsOnly"
+          ],
+          "allowKerberosAuthentication": [
+            "false"
+          ],
+          "useKerberosForPasswordAuthentication": [
+            "false"
+          ]
+        }
+      }
+    ],
+    "org.keycloak.storage.ldap.mappers.LDAPStorageMapper": [
+      {
+        "name": "groups",
+        "providerId": "group-ldap-mapper",
+        "providerType": "org.keycloak.storage.ldap.mappers.LDAPStorageMapper",
+        "parentId": "ldap-internal",
+        "config": {
+          "mode": [
+            "READ_ONLY"
+          ],
+          "groups.dn": [
+            "ou=groups,dc=example,dc=org"
+          ],
+          "group.name.ldap.attribute": [
+            "cn"
+          ],
+          "group.object.classes": [
+            "groupOfNames"
+          ],
+          "preserve.group.inheritance": [
+            "true"
+          ],
+          "membership.ldap.attribute": [
+            "member"
+          ],
+          "membership.attribute.type": [
+            "DN"
+          ],
+          "membership.user.ldap.attribute": [
+            "uid"
+          ],
+          "user.roles.retrieve.strategy": [
+            "LOAD_GROUPS_BY_MEMBER_ATTRIBUTE"
+          ],
+          "memberof.ldap.attribute": [
+            "memberOf"
+          ],
+          "groups.path": [
+            "/"
+          ],
+          "ignore.missing.groups": [
+            "true"
+          ]
+        }
+      }
+    ]
+  }
+}

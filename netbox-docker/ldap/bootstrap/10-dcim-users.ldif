@@ -1,0 +1,41 @@
+dn: ou=users,dc=example,dc=org
+objectClass: organizationalUnit
+ou: users
+
+dn: ou=groups,dc=example,dc=org
+objectClass: organizationalUnit
+ou: groups
+
+dn: uid=ldap-admin,ou=users,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: LDAP Admin
+sn: Admin
+givenName: LDAP
+uid: ldap-admin
+mail: ldap-admin@example.org
+userPassword: admin
+
+dn: uid=ldap-guest,ou=users,dc=example,dc=org
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+cn: LDAP Guest
+sn: Guest
+givenName: LDAP
+uid: ldap-guest
+mail: ldap-guest@example.org
+userPassword: guest
+
+dn: cn=dcim-admin,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+cn: dcim-admin
+member: uid=ldap-admin,ou=users,dc=example,dc=org
+
+dn: cn=dcim-guest,ou=groups,dc=example,dc=org
+objectClass: groupOfNames
+cn: dcim-guest
+member: uid=ldap-guest,ou=users,dc=example,dc=org

@@ -50,6 +50,70 @@ The whole application will be available after a few minutes.
 Open the URL `http://0.0.0.0:8000/` in a web-browser.
 You should see the NetBox homepage.
 
+## Local Keycloak SSO
+
+This repository includes `docker-compose.keycloak.yml` for local Keycloak SSO.
+The local architecture is LDAP -> Keycloak -> OIDC -> NetBox. NetBox does not connect to LDAP directly.
+
+It imports realm `netbox-dev`, client `netbox-dev`, roles `dcim-admin`/`dcim-guest`,
+Keycloak groups `Admin`/`Guest`, and starts an internal LDAP service with demo users
+`ldap-admin` and `ldap-guest`. LDAP is the identity source for internal app users;
+NetBox does not connect to LDAP directly.
+
+Run NetBox with Keycloak:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml up -d --build
+```
+
+Apply LDAP federation, role/group mappers, and trigger LDAP sync:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\keycloak\configure-ldap-oidc.ps1
+```
+
+Bootstrap NetBox RBAC for the synced `Admin`/`Guest` groups:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_bootstrap_rbac
+```
+
+OpenID discovery:
+
+```text
+http://keycloak.local:8080/realms/netbox-dev/.well-known/openid-configuration
+```
+
+Credentials:
+
+```text
+Keycloak admin: admin / admin
+LDAP admin SSO user: ldap-admin / admin
+LDAP guest SSO user: ldap-guest / guest
+```
+
+The imported Keycloak client exposes `groups` and `roles` OIDC claims. NetBox runs the custom
+`netbox_smartlock.auth_pipeline.sync_keycloak_groups` social-auth pipeline step and
+syncs allow-listed Keycloak groups/roles into NetBox groups on each login:
+
+```env
+KEYCLOAK_GROUP_SYNC_ENABLED=True
+KEYCLOAK_GROUP_SYNC_GROUPS=Admin Guest
+KEYCLOAK_GROUP_SYNC_REMOVE=True
+KEYCLOAK_GROUP_SYNC_GROUP_MAP=dcim-admin=Admin dcim-guest=Guest
+KEYCLOAK_GROUP_SYNC_ROLE_MAP=dcim-admin=Admin dcim-guest=Guest
+```
+
+Only the allow-listed groups are managed by the pipeline. Existing local NetBox
+groups outside that list are left untouched.
+
+The SmartLock plugin API accepts Keycloak Bearer JWTs on `/api/plugins/smartlock/...`.
+Tokens must be issued by realm `netbox-dev` for client `netbox-dev`.
+
+Region/Site scope remains enforced by NetBox ObjectPermission constraints. Use
+`smartlock_bootstrap_rbac` for the default local setup, then tighten Region/Site
+constraints in NetBox for customer- or tenant-specific access.
+
 To create the first admin user run this command:
 
 ```bash

@@ -1,0 +1,62 @@
+services:
+  netbox:
+    extra_hosts:
+      - "keycloak.local:host-gateway"
+
+  netbox-worker:
+    extra_hosts:
+      - "keycloak.local:host-gateway"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.3
+    command:
+      - start-dev
+      - --http-port=8080
+      - --hostname=http://keycloak.local:8080
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./keycloak/realm-netbox-dev.json:/opt/keycloak/data/import/realm-netbox-dev.json:ro
+    depends_on:
+      ldap:
+        condition: service_healthy
+    networks:
+      default:
+        aliases:
+          - keycloak.local
+
+  ldap:
+    image: osixia/openldap:1.5.0
+    environment:
+      LDAP_ORGANISATION: NetBox SmartLock
+      LDAP_DOMAIN: example.org
+      LDAP_ADMIN_PASSWORD: admin
+      LDAP_CONFIG_PASSWORD: config
+    ports:
+      - "3890:389"
+    volumes:
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+      - ./ldap/bootstrap:/container/service/slapd/assets/config/bootstrap/ldif/custom:ro
+    command:
+      - --copy-service
+    healthcheck:
+      test: ldapsearch -x -H ldap://localhost:389 -D cn=admin,dc=example,dc=org -w admin -b dc=example,dc=org -s base dn
+      start_period: 20s
+      timeout: 5s
+      interval: 10s
+      retries: 12
+
+volumes:
+  keycloak-data:
+    driver: local
+  ldap-data:
+    driver: local
+  ldap-config:
+    driver: local

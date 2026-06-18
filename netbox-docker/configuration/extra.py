@@ -2,6 +2,15 @@
 ## This file contains extra configuration options that can't be configured
 ## directly through environment variables.
 ####
+from os import environ
+
+
+def _as_bool(value):
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+def _as_list(value):
+    return [item.strip() for item in str(value).replace(",", " ").split() if item.strip()]
 
 ## Specify one or more name and email address tuples representing NetBox administrators. These people will be notified of
 ## application errors (assuming correct email settings are provided).
@@ -30,6 +39,33 @@
 
 ## Remote authentication support
 # REMOTE_AUTH_DEFAULT_PERMISSIONS = {}
+
+KEYCLOAK_GROUP_SYNC_ENABLED = _as_bool(environ.get("KEYCLOAK_GROUP_SYNC_ENABLED", "False"))
+KEYCLOAK_GROUP_SYNC_GROUPS = _as_list(environ.get("KEYCLOAK_GROUP_SYNC_GROUPS", "Admin Guest"))
+KEYCLOAK_GROUP_SYNC_REMOVE = _as_bool(environ.get("KEYCLOAK_GROUP_SYNC_REMOVE", "True"))
+KEYCLOAK_GROUP_SYNC_GROUP_MAP = dict(
+    item.split("=", 1)
+    for item in _as_list(environ.get("KEYCLOAK_GROUP_SYNC_GROUP_MAP", "dcim-admin=Admin dcim-guest=Guest"))
+    if "=" in item
+)
+KEYCLOAK_GROUP_SYNC_ROLE_MAP = dict(
+    item.split("=", 1)
+    for item in _as_list(environ.get("KEYCLOAK_GROUP_SYNC_ROLE_MAP", "dcim-admin=Admin dcim-guest=Guest"))
+    if "=" in item
+)
+
+SOCIAL_AUTH_PIPELINE = (
+    "social_core.pipeline.social_auth.social_details",
+    "social_core.pipeline.social_auth.social_uid",
+    "social_core.pipeline.social_auth.social_user",
+    "social_core.pipeline.user.get_username",
+    "social_core.pipeline.user.create_user",
+    "social_core.pipeline.social_auth.associate_user",
+    "netbox.authentication.user_default_groups_handler",
+    "netbox_smartlock.auth_pipeline.sync_keycloak_groups",
+    "social_core.pipeline.social_auth.load_extra_data",
+    "social_core.pipeline.user.user_details",
+)
 
 
 ## By default uploaded media is stored on the local filesystem. Using Django-storages is also supported. Provide the

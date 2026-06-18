@@ -13,12 +13,13 @@ import openpyxl
 from core.models import ObjectType
 from dcim.models import Device, DeviceRole, DeviceType, Location, Manufacturer, Rack, Region, Site
 from netbox.choices import CSVDelimiterChoices, ImportFormatChoices
+from rest_framework.test import APIRequestFactory
 from users.models import ObjectPermission
 
 from upload_file_plugin.models import UploadedFile
 from upload_file_plugin.services import sync_uploaded_files
 
-from netbox_smartlock.api.serializers import SmartLockSerializer
+from netbox_smartlock.api.serializers import AssetSerializer, SmartLockSerializer
 from netbox_smartlock.contracts import SMARTLOCK_IMPORT_FIELD_NAMES
 from netbox_smartlock.models import Asset, AssetGroup, SmartLock
 
@@ -957,6 +958,14 @@ class SmartLockPermissionTest(SmartLockIntegrationTestBase):
 
 
 class SmartLockApiValidationTest(SmartLockIntegrationTestBase):
+    def test_asset_api_serializer_accepts_list_instances(self):
+        asset = self.make_device_asset(name="API List Asset")
+        request = APIRequestFactory().get("/api/plugins/smartlock/assets/")
+
+        serializer = AssetSerializer(instance=[asset], many=True, context={"request": request})
+
+        self.assertEqual(serializer.data[0]["name"], asset.name)
+
     def test_api_serializer_uses_shared_rack_mapping_validation(self):
         data = {
             "name": "  API Lock  ",

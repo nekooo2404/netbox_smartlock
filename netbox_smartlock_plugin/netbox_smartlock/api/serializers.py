@@ -74,7 +74,7 @@ class AssetSerializer(NetBoxModelSerializer):
         device_queryset = Device.objects.all()
         if request_user is not None and hasattr(device_queryset, "restrict"):
             device_queryset = device_queryset.restrict(request_user, "view")
-        if self.instance:
+        if isinstance(self.instance, Asset):
             device_queryset = device_queryset.filter(
                 Q(smartlock_asset__isnull=True) | Q(pk=self.instance.device_id)
             )

@@ -2,6 +2,7 @@ from netbox.api.viewsets import NetBoxModelViewSet
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -28,6 +29,7 @@ from ..permissions import (
     restrict_access_request_persons_for_user,
     restrict_access_requests_for_user,
 )
+from .authentication import KeycloakOIDCAuthentication
 from .errors import raise_serializer_validation_error
 from .serializers import (
     AccessRequestPersonSerializer,
@@ -36,6 +38,13 @@ from .serializers import (
     AssetSerializer,
     SmartLockSerializer,
 )
+
+
+class SmartLockAuthenticationMixin:
+    authentication_classes = (
+        KeycloakOIDCAuthentication,
+        SessionAuthentication,
+    )
 
 
 class AdminCrudGuardMixin:
@@ -107,7 +116,12 @@ class AccessRequestAdminActionMixin:
         return Response(self.get_serializer(instance).data)
 
 
-class AccessRequestViewSet(AdminCrudGuardMixin, AccessRequestAdminActionMixin, NetBoxModelViewSet):
+class AccessRequestViewSet(
+    SmartLockAuthenticationMixin,
+    AdminCrudGuardMixin,
+    AccessRequestAdminActionMixin,
+    NetBoxModelViewSet,
+):
     admin_crud_message = ACCESS_REQUEST_ADMIN_CRUD_MESSAGE
     workflow_actions = ("confirm", "accept", "reject", "complete")
     queryset = AccessRequest.objects.select_related("region", "site").prefetch_related("tags")
@@ -152,7 +166,12 @@ class AccessRequestViewSet(AdminCrudGuardMixin, AccessRequestAdminActionMixin, N
         return self.run_workflow_action(self.get_object(), "complete")
 
 
-class AccessRequestPersonViewSet(AdminCrudGuardMixin, AccessRequestAdminActionMixin, NetBoxModelViewSet):
+class AccessRequestPersonViewSet(
+    SmartLockAuthenticationMixin,
+    AdminCrudGuardMixin,
+    AccessRequestAdminActionMixin,
+    NetBoxModelViewSet,
+):
     admin_crud_message = ACCESS_REQUEST_PERSON_ADMIN_CRUD_MESSAGE
     admin_permission_checker = staticmethod(can_manage_access_request_persons)
     workflow_permission_message = ACCESS_REQUEST_PERSON_WORKFLOW_PERMISSION_MESSAGE
@@ -191,13 +210,13 @@ class AccessRequestPersonViewSet(AdminCrudGuardMixin, AccessRequestAdminActionMi
         return self.run_workflow_action(self.get_object(), "mark_out")
 
 
-class AssetGroupViewSet(NetBoxModelViewSet):
+class AssetGroupViewSet(SmartLockAuthenticationMixin, NetBoxModelViewSet):
     queryset = AssetGroup.objects.prefetch_related("tags")
     serializer_class = AssetGroupSerializer
     filterset_class = AssetGroupFilterSet
 
 
-class AssetViewSet(NetBoxModelViewSet):
+class AssetViewSet(SmartLockAuthenticationMixin, NetBoxModelViewSet):
     queryset = Asset.objects.select_related(
         "asset_group", "device", "device__device_type__manufacturer",
         "device__site", "device__location", "device__rack",
@@ -206,7 +225,7 @@ class AssetViewSet(NetBoxModelViewSet):
     filterset_class = DeviceAssetFilterSet
 
 
-class SmartLockViewSet(NetBoxModelViewSet):
+class SmartLockViewSet(SmartLockAuthenticationMixin, NetBoxModelViewSet):
     queryset = SmartLock.objects.select_related(
         "asset_group", "region", "site", "location", "rack"
     ).prefetch_related("tags")
