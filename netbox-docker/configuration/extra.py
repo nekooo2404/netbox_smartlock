@@ -53,6 +53,14 @@ KEYCLOAK_GROUP_SYNC_ROLE_MAP = dict(
     for item in _as_list(environ.get("KEYCLOAK_GROUP_SYNC_ROLE_MAP", "dcim-admin=Admin dcim-guest=Guest"))
     if "=" in item
 )
+KEYCLOAK_SCOPE_SYNC_ENABLED = _as_bool(environ.get("KEYCLOAK_SCOPE_SYNC_ENABLED", "False"))
+KEYCLOAK_SCOPE_SYNC_REMOVE = _as_bool(environ.get("KEYCLOAK_SCOPE_SYNC_REMOVE", "True"))
+KEYCLOAK_SCOPE_SYNC_REGION_CLAIM = environ.get("KEYCLOAK_SCOPE_SYNC_REGION_CLAIM", "dcim_regions")
+KEYCLOAK_SCOPE_SYNC_SITE_CLAIM = environ.get("KEYCLOAK_SCOPE_SYNC_SITE_CLAIM", "dcim_sites")
+KEYCLOAK_SCOPE_SYNC_PERMISSION_PREFIX = environ.get(
+    "KEYCLOAK_SCOPE_SYNC_PERMISSION_PREFIX",
+    "SmartLock Keycloak Scope",
+)
 
 SOCIAL_AUTH_PIPELINE = (
     "social_core.pipeline.social_auth.social_details",

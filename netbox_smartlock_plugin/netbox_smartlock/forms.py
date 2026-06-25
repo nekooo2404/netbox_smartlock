@@ -1,7 +1,6 @@
 from django import forms
-from django.db import models
 
-from dcim.models import Device, Location, Rack, Region, Site
+from dcim.models import Location, Rack, Region, Site
 from netbox.forms import NetBoxModelBulkEditForm, NetBoxModelFilterSetForm, NetBoxModelForm, NetBoxModelImportForm
 from utilities.forms.fields import (
     CSVChoiceField,
@@ -167,8 +166,8 @@ def add_required_upload_error(form, upload_files, *, instance=None):
 
 
 ASSETGROUP_VISUALIZATION_HELP_TEXT = (
-    "Khi được chọn: tất cả tài sản thuộc nhóm tài sản này sẽ không được thêm vào visualization. "
-    "Khi không được chọn: tất cả tài sản thuộc nhóm tài sản này sẽ được thêm vào visualization."
+    "Checked: tất cả tài sản thuộc nhóm tài sản này sẽ được thêm vào visualization. "
+    "Unchecked: các tài sản thuộc nhóm tài sản này sẽ không được thêm vào visualization."
 )
 
 
@@ -189,7 +188,7 @@ class AssetGroupForm(UploadFileFormMixin, NetBoxModelForm):
             "name": "Tên",
             "code": "Mã",
             "status": "Trạng thái",
-            "exclude_from_visualization": "Loại trừ khỏi visualization",
+            "exclude_from_visualization": "Exclude from Visualization",
             "description": "Mô tả",
             "comments": "Ghi chú",
         }
@@ -232,7 +231,7 @@ class AssetGroupFilterForm(NetBoxModelFilterSetForm):
 class AssetGroupImportForm(NetBoxModelImportForm):
     exclude_from_visualization = forms.BooleanField(
         required=False,
-        label="Loại trừ khỏi visualization",
+        label="Exclude from Visualization",
         help_text=ASSETGROUP_VISUALIZATION_HELP_TEXT,
     )
     status = CSVChoiceField(
@@ -247,7 +246,7 @@ class AssetGroupImportForm(NetBoxModelImportForm):
             "name": "Tên",
             "code": "Mã",
             "status": "Trạng thái",
-            "exclude_from_visualization": "Loại trừ khỏi visualization",
+            "exclude_from_visualization": "Exclude from Visualization",
             "description": "Mô tả",
             "comments": "Ghi chú",
         }
@@ -557,37 +556,58 @@ class DeviceAssetFileForm(UploadFileFormMixin, NetBoxModelForm):
 
 
 class DeviceAssetForm(UploadFileFormMixin, NetBoxModelForm):
-    """Form tài sản nghiệp vụ, trỏ tới Device để tận dụng dữ liệu DCIM gốc của NetBox."""
+    """Form tài sản nghiệp vụ độc lập theo DICM."""
 
     upload_file_model_name = "asset"
     request_user = None
 
-    device = DynamicModelChoiceField(
-        queryset=Device.objects.select_related("device_type__manufacturer", "site", "location", "rack"),
-        label="Thiết bị",
-    )
     asset_group = DynamicModelChoiceField(
         queryset=AssetGroup.objects.filter(status=AssetGroup.STATUS_ACTIVE),
         label="Nhóm tài sản",
     )
+    region = DynamicModelChoiceField(
+        queryset=Region.objects.all(),
+        required=False,
+        label="Khu vực",
+    )
+    site = DynamicModelChoiceField(
+        queryset=Site.objects.all(),
+        required=False,
+        label="Địa điểm",
+        query_params={"region_id": "$region"},
+    )
+    location = DynamicModelChoiceField(
+        queryset=Location.objects.all(),
+        required=False,
+        label="Vị trí",
+        query_params={"site_id": "$site"},
+    )
 
     fieldsets = (
-        FieldSet("device", "name", "code", "asset_group", "status", name="Thông tin chính"),
+        FieldSet("name", "code", "asset_group", "status", name="Thông tin chính"),
+        FieldSet("device_type", "model", "serial", "manufacturer", name="Thiết bị"),
         FieldSet("setup_date", "bought_date", "warranty_period", "warranty_expiration_preview", name="Vòng đời và bảo hành"),
+        FieldSet("region", "site", "location", name="Vị trí"),
         FieldSet("description", "comments", "upload_files", "tags", name="Dữ liệu bổ sung"),
     )
 
     class Meta:
         model = Asset
         fields = (
-            "device", "name", "code", "asset_group", "status",
+            "name", "code", "asset_group", "status",
+            "device_type", "model", "serial", "manufacturer",
             "setup_date", "bought_date", "warranty_period",
+            "region", "site", "location",
             "description", "comments", "tags",
         )
         labels = {
             "name": "Tên",
             "code": "Mã",
             "status": "Trạng thái",
+            "device_type": "Loại thiết bị",
+            "model": "Model",
+            "serial": "Serial",
+            "manufacturer": "Hãng sản xuất",
             "setup_date": "Ngày lắp đặt",
             "bought_date": "Ngày mua",
             "warranty_period": "Thời hạn bảo hành",
@@ -602,7 +622,6 @@ class DeviceAssetForm(UploadFileFormMixin, NetBoxModelForm):
         }
         help_texts = {
             "code": "Mã tài sản là bắt buộc, tối đa 50 ký tự và duy nhất.",
-            "device": "Chọn thiết bị để dùng Site, Location, Rack, loại thiết bị, hãng sản xuất và serial từ NetBox.",
             "warranty_period": "Đơn vị: tháng. Hệ thống tự tính ngày hết hạn bảo hành.",
         }
 
@@ -610,16 +629,7 @@ class DeviceAssetForm(UploadFileFormMixin, NetBoxModelForm):
         self.request_user = kwargs.pop("request_user", None) or self.__class__.request_user
         super().__init__(*args, **kwargs)
         restrict_asset_group_field(self, self.request_user)
-        device_queryset = self.fields["device"].queryset
-        if self.request_user is not None and hasattr(device_queryset, "restrict"):
-            device_queryset = device_queryset.restrict(self.request_user, "view")
-        if self.instance.pk:
-            device_queryset = device_queryset.filter(
-                models.Q(smartlock_asset__isnull=True) | models.Q(pk=self.instance.device_id)
-            )
-        else:
-            device_queryset = device_queryset.filter(smartlock_asset__isnull=True)
-        self.fields["device"].queryset = device_queryset
+        restrict_dcim_scope_fields(self, self.request_user)
         self.fields["warranty_expiration_preview"] = forms.DateField(
             required=False,
             label="Ngày hết hạn bảo hành",
@@ -634,6 +644,18 @@ class DeviceAssetForm(UploadFileFormMixin, NetBoxModelForm):
     def clean_code(self):
         return normalize_text(self.cleaned_data["code"])
 
+    def clean_device_type(self):
+        return normalize_text(self.cleaned_data["device_type"])
+
+    def clean_model(self):
+        return normalize_text(self.cleaned_data.get("model"))
+
+    def clean_serial(self):
+        return normalize_text(self.cleaned_data.get("serial"))
+
+    def clean_manufacturer(self):
+        return normalize_text(self.cleaned_data.get("manufacturer"))
+
     def clean_description(self):
         return normalize_text(self.cleaned_data.get("description"))
 
@@ -646,11 +668,11 @@ class DeviceAssetFilterForm(NetBoxModelFilterSetForm):
     fieldsets = (
         FieldSet("q", "filter_id", "tag"),
         FieldSet("name", "code", "status", "asset_group_id", name="Thông tin chính"),
-        FieldSet("site_id", "location_id", "rack_id", name="Vị trí"),
+        FieldSet("site_id", "location_id", name="Vị trí"),
     )
     selector_fields = (
         "filter_id", "q", "status", "asset_group_id",
-        "site_id", "location_id", "rack_id",
+        "site_id", "location_id",
     )
 
     name = forms.CharField(required=False, label="Tên")
@@ -675,12 +697,6 @@ class DeviceAssetFilterForm(NetBoxModelFilterSetForm):
         required=False,
         label="Vị trí",
         query_params={"site_id": "$site_id"},
-    )
-    rack_id = DynamicModelMultipleChoiceField(
-        queryset=Rack.objects.all(),
-        required=False,
-        label="Tủ rack",
-        query_params={"site_id": "$site_id", "location_id": "$location_id"},
     )
     tag = TagFilterField(model)
 

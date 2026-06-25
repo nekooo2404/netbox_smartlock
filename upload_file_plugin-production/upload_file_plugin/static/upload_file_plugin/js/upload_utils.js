@@ -1,7 +1,7 @@
 (function (window) {
   const utils = {};
 
-  utils.VALID_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+  utils.VALID_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png']);
 
   utils.getCookie = function getCookie(name) {
     const cookies = document.cookie ? document.cookie.split(';') : [];

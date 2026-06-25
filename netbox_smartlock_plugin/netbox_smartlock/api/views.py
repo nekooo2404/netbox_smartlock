@@ -218,8 +218,7 @@ class AssetGroupViewSet(SmartLockAuthenticationMixin, NetBoxModelViewSet):
 
 class AssetViewSet(SmartLockAuthenticationMixin, NetBoxModelViewSet):
     queryset = Asset.objects.select_related(
-        "asset_group", "device", "device__device_type__manufacturer",
-        "device__site", "device__location", "device__rack",
+        "asset_group", "region", "site", "location",
     ).prefetch_related("tags")
     serializer_class = AssetSerializer
     filterset_class = DeviceAssetFilterSet

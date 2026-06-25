@@ -2,7 +2,7 @@
 
 {% block breadcrumbs %}
   <li class="breadcrumb-item">
-    <a href="{% url 'plugins:netbox_smartlock:device_asset_list' %}">Tài sản</a>
+    <a href="{% url 'plugins:netbox_smartlock:asset_list' %}">Tài sản</a>
   </li>
 {% endblock breadcrumbs %}
 
@@ -25,7 +25,6 @@
         <table class="table table-hover attr-table">
           <tr><th scope="row">Tên</th><td>{{ object.name }}</td></tr>
           <tr><th scope="row">Mã</th><td>{{ object.code|default:"-" }}</td></tr>
-          <tr><th scope="row">Thiết bị</th><td><a href="{{ device.get_absolute_url }}">{{ device }}</a></td></tr>
           <tr><th scope="row">Nhóm tài sản</th><td>{% if object.asset_group %}<a href="{{ object.asset_group.get_absolute_url }}">{{ object.asset_group }}</a>{% else %}-{% endif %}</td></tr>
           <tr><th scope="row">Trạng thái</th><td>{{ asset_status_label }}</td></tr>
           <tr><th scope="row">Người tạo</th><td>{{ created_by_name }}</td></tr>
@@ -56,16 +55,16 @@
   </div>
   <div class="col-md-6">
     <div class="card">
-      <h5 class="card-header">Dữ liệu thiết bị NetBox</h5>
+      <h5 class="card-header">Thiết bị và vị trí</h5>
       <div class="card-body">
         <table class="table table-hover attr-table">
-          <tr><th scope="row">Địa điểm</th><td>{% if device.site %}<a href="{{ device.site.get_absolute_url }}">{{ device.site }}</a>{% else %}-{% endif %}</td></tr>
-          <tr><th scope="row">Vị trí</th><td>{% if device.location %}<a href="{{ device.location.get_absolute_url }}">{{ device.location }}</a>{% else %}-{% endif %}</td></tr>
-          <tr><th scope="row">Tủ rack</th><td>{% if device.rack %}<a href="{{ device.rack.get_absolute_url }}">{{ device.rack }}</a>{% else %}-{% endif %}</td></tr>
-          <tr><th scope="row">Loại thiết bị</th><td>{% if device.device_type %}<a href="{{ device.device_type.get_absolute_url }}">{{ device.device_type }}</a>{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Region</th><td>{% if object.region %}<a href="{{ object.region.get_absolute_url }}">{{ object.region }}</a>{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Địa điểm</th><td>{% if object.site %}<a href="{{ object.site.get_absolute_url }}">{{ object.site }}</a>{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Vị trí</th><td>{% if object.location %}<a href="{{ object.location.get_absolute_url }}">{{ object.location }}</a>{% else %}-{% endif %}</td></tr>
+          <tr><th scope="row">Loại thiết bị</th><td>{{ object.device_type|default:"-" }}</td></tr>
+          <tr><th scope="row">Model</th><td>{{ object.model|default:"-" }}</td></tr>
           <tr><th scope="row">Nhà sản xuất</th><td>{{ object.manufacturer|default:"-" }}</td></tr>
-          <tr><th scope="row">Serial</th><td>{{ device.serial|default:"-" }}</td></tr>
-          <tr><th scope="row">Asset Tag</th><td>{{ device.asset_tag|default:"-" }}</td></tr>
+          <tr><th scope="row">Serial</th><td>{{ object.serial|default:"-" }}</td></tr>
         </table>
       </div>
     </div>

@@ -26,11 +26,11 @@ menu = PluginMenu(
             "Tài sản",
             (
                 PluginMenuItem(
-                    link="plugins:netbox_smartlock:device_asset_list",
+                    link="plugins:netbox_smartlock:asset_list",
                     link_text="Quản lý tài sản",
                     buttons=(
                         PluginMenuButton(
-                            link="plugins:netbox_smartlock:device_asset_add",
+                            link="plugins:netbox_smartlock:asset_add",
                             title="Thêm",
                             icon_class="mdi mdi-plus-thick",
                             color=_BTN_GREEN,

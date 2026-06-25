@@ -99,6 +99,12 @@ class SmartLockIntegrationTestBase(TestCase):
             device=device,
             asset_group=asset_group,
             status=Asset.STATUS_ACTIVE,
+            device_type=str(self.device_type),
+            manufacturer=str(self.manufacturer),
+            serial=device.serial,
+            region=self.region,
+            site=self.site,
+            location=self.location,
         )
 
     def smartlock_row(self, *, code="SL-001", name="Front Door", rack_lookup="site-1|room-a|R01"):
@@ -273,14 +279,14 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
 
         for response in (list_response, add_response, detail_response):
             self.assertEqual(response.status_code, 200)
-            self.assertContains(response, "Loại trừ khỏi visualization")
+            self.assertContains(response, "Exclude from Visualization")
         self.assertContains(
             add_response,
-            "Khi được chọn: tất cả tài sản thuộc nhóm tài sản này sẽ không được thêm vào visualization.",
+            "Checked: tất cả tài sản thuộc nhóm tài sản này sẽ được thêm vào visualization.",
         )
         self.assertContains(
             add_response,
-            "Khi không được chọn: tất cả tài sản thuộc nhóm tài sản này sẽ được thêm vào visualization.",
+            "Unchecked: các tài sản thuộc nhóm tài sản này sẽ không được thêm vào visualization.",
         )
 
     def test_assetgroup_quick_search_matches_vietnamese_status_label(self):
@@ -327,14 +333,15 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         )
         self.assertIn("netbox_asset_groups.xlsx", response["Content-Disposition"])
 
-    def test_asset_model_reuses_dcim_device_without_copying_infrastructure(self):
+    def test_asset_model_stores_dicm_fields_directly(self):
         asset = self.make_device_asset(name="Mapped Device Asset")
 
-        self.assertEqual(asset.device.site, self.site)
-        self.assertEqual(asset.device.location, self.location)
+        self.assertEqual(asset.site, self.site)
+        self.assertEqual(asset.location, self.location)
+        self.assertEqual(asset.region, self.region)
         self.assertEqual(asset.device.rack, self.rack)
-        self.assertEqual(asset.device_type, self.device_type)
-        self.assertEqual(asset.manufacturer, self.manufacturer)
+        self.assertEqual(asset.device_type, str(self.device_type))
+        self.assertEqual(asset.manufacturer, str(self.manufacturer))
 
     def test_device_asset_warranty_expiration_is_calculated_on_asset_model(self):
         asset = self.make_device_asset(name="Warranty Device")
@@ -364,25 +371,25 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         self.assertContains(response, asset.name)
         self.assertContains(response, f"asset_group_id={self.asset_group.pk}")
 
-    def test_device_asset_list_uses_dcim_device_with_dicm_default_columns(self):
+    def test_device_asset_list_uses_dicm_default_columns(self):
         asset = self.make_device_asset(name="List Device")
         self.login()
         self.grant_object_permission(Asset, ["view", "add", "change", "delete"])
 
-        response = self.client.get(reverse("plugins:netbox_smartlock:device_asset_list"))
+        response = self.client.get(reverse("plugins:netbox_smartlock:asset_list"))
 
         self.assertEqual(response.status_code, 200)
         for label in (
-            "Tên", "Mã", "Trạng thái", "Thiết bị", "Địa điểm", "Vị trí", "Nhóm tài sản",
+            "Tên", "Mã", "Trạng thái", "Địa điểm", "Vị trí", "Nhóm tài sản",
             "Hãng sản xuất", "Loại thiết bị", "Người tạo", "Thời gian tạo", "Thời gian cập nhật",
         ):
             self.assertContains(response, label)
         self.assertNotContains(response, "Thiết bị DCIM")
         self.assertContains(response, asset.name)
         self.assertContains(response, asset.code)
-        self.assertContains(response, reverse("plugins:netbox_smartlock:device_asset_add"))
-        self.assertContains(response, reverse("plugins:netbox_smartlock:device_asset_edit", kwargs={"pk": asset.pk}))
-        self.assertContains(response, reverse("plugins:netbox_smartlock:device_asset_delete", kwargs={"pk": asset.pk}))
+        self.assertContains(response, reverse("plugins:netbox_smartlock:asset_add"))
+        self.assertContains(response, reverse("plugins:netbox_smartlock:asset_edit", kwargs={"pk": asset.pk}))
+        self.assertContains(response, reverse("plugins:netbox_smartlock:asset_delete", kwargs={"pk": asset.pk}))
 
     def test_device_asset_quick_search_matches_asset_group_and_status(self):
         active_asset = self.make_device_asset(name="Active Group Asset")
@@ -393,11 +400,11 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         self.grant_object_permission(Asset, ["view"])
 
         group_response = self.client.get(
-            reverse("plugins:netbox_smartlock:device_asset_list"),
+            reverse("plugins:netbox_smartlock:asset_list"),
             {"q": self.asset_group.name},
         )
         status_response = self.client.get(
-            reverse("plugins:netbox_smartlock:device_asset_list"),
+            reverse("plugins:netbox_smartlock:asset_list"),
             {"q": "Dự phòng"},
         )
 
@@ -411,24 +418,21 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
     def test_device_asset_add_requires_asset_code(self):
         self.login()
         self.grant_object_permission(Asset, ["view", "add"])
-        self.grant_object_permission(Device, ["view"])
         self.grant_object_permission(AssetGroup, ["view"])
-        device = Device.objects.create(
-            name="Missing Code Device",
-            device_type=self.device_type,
-            role=self.device_role,
-            site=self.site,
-            location=self.location,
-        )
+        for model in (Region, Site, Location):
+            self.grant_object_permission(model, ["view"])
 
         response = self.client.post(
-            reverse("plugins:netbox_smartlock:device_asset_add"),
+            reverse("plugins:netbox_smartlock:asset_add"),
             {
                 "name": "Missing Asset Code",
                 "code": "",
-                "device": device.pk,
                 "asset_group": self.asset_group.pk,
                 "status": Asset.STATUS_ACTIVE,
+                "device_type": str(self.device_type),
+                "region": self.region.pk,
+                "site": self.site.pk,
+                "location": self.location.pk,
                 "upload_files": "[]",
                 "_create": "Tạo",
             },
@@ -441,18 +445,18 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
     def test_device_asset_form_renders_cancel_confirmation_modal(self):
         self.login()
         self.grant_object_permission(Asset, ["add"])
-        self.grant_object_permission(Device, ["view"])
         self.grant_object_permission(AssetGroup, ["view"])
 
-        response = self.client.get(reverse("plugins:netbox_smartlock:device_asset_add"))
+        response = self.client.get(reverse("plugins:netbox_smartlock:asset_add"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Thiết bị")
+        self.assertContains(response, "Loại thiết bị")
+        self.assertNotContains(response, "Thiết bị NetBox tham chiếu")
         self.assertNotContains(response, "Thiết bị DCIM")
         self.assertContains(response, 'data-bs-target="#smartlock-cancel-confirm-modal"')
         self.assertContains(response, "Hủy thay đổi?")
 
-    def test_device_asset_detail_labels_device_without_dcim_suffix(self):
+    def test_device_asset_detail_uses_dicm_asset_fields_without_device_reference(self):
         asset = self.make_device_asset(name="Detail Label Asset")
         self.login()
         self.grant_object_permission(Asset, ["view"])
@@ -460,46 +464,79 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         response = self.client.get(asset.get_absolute_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Thiết bị")
+        self.assertContains(response, "Loại thiết bị")
+        self.assertNotContains(response, "Thiết bị NetBox tham chiếu")
         self.assertNotContains(response, "Thiết bị DCIM")
 
     def test_device_asset_add_redirects_to_asset_list_after_create(self):
         self.login()
         self.grant_object_permission(Asset, ["view", "add"])
-        self.grant_object_permission(Device, ["view"])
         self.grant_object_permission(AssetGroup, ["view"])
-        device = Device.objects.create(
-            name="Created Device",
-            asset_tag="ASSET-CREATED-DEVICE",
-            device_type=self.device_type,
-            role=self.device_role,
-            site=self.site,
-            location=self.location,
-        )
+        for model in (Region, Site, Location):
+            self.grant_object_permission(model, ["view"])
 
         response = self.client.post(
-            reverse("plugins:netbox_smartlock:device_asset_add"),
+            reverse("plugins:netbox_smartlock:asset_add"),
             {
                 "name": "Created Asset",
                 "code": "ASSET-CREATED",
-                "device": device.pk,
                 "asset_group": self.asset_group.pk,
                 "status": Asset.STATUS_ACTIVE,
+                "device_type": str(self.device_type),
+                "model": "M1",
+                "serial": "S1",
+                "manufacturer": str(self.manufacturer),
+                "region": self.region.pk,
+                "site": self.site.pk,
+                "location": self.location.pk,
                 "upload_files": "[]",
                 "_create": "Tạo",
             },
         )
 
-        self.assertRedirects(response, reverse("plugins:netbox_smartlock:device_asset_list"))
-        self.assertTrue(Asset.objects.filter(name="Created Asset", code="ASSET-CREATED", device=device).exists())
+        self.assertRedirects(response, reverse("plugins:netbox_smartlock:asset_list"))
+        self.assertTrue(Asset.objects.filter(name="Created Asset", code="ASSET-CREATED", device__isnull=True).exists())
 
-    def test_device_asset_list_export_uses_scoped_device_table(self):
+    def test_device_asset_add_creates_dicm_asset_without_device(self):
+        self.login()
+        self.grant_object_permission(Asset, ["view", "add"])
+        self.grant_object_permission(AssetGroup, ["view"])
+        for model in (Region, Site, Location):
+            self.grant_object_permission(model, ["view"])
+
+        response = self.client.post(
+            reverse("plugins:netbox_smartlock:asset_add"),
+            {
+                "name": "Standalone Asset",
+                "code": "ASSET-STANDALONE",
+                "asset_group": self.asset_group.pk,
+                "status": Asset.STATUS_ACTIVE,
+                "device_type": "Access Controller",
+                "model": "AC-200",
+                "serial": "SER-200",
+                "manufacturer": "GTSC",
+                "region": self.region.pk,
+                "site": self.site.pk,
+                "location": self.location.pk,
+                "upload_files": "[]",
+                "_create": "Tạo",
+            },
+        )
+
+        self.assertRedirects(response, reverse("plugins:netbox_smartlock:asset_list"))
+        asset = Asset.objects.get(code="ASSET-STANDALONE")
+        self.assertIsNone(asset.device)
+        self.assertEqual(asset.device_type, "Access Controller")
+        self.assertEqual(asset.site, self.site)
+        self.assertEqual(asset.location, self.location)
+
+    def test_device_asset_list_export_uses_asset_table(self):
         asset = self.make_device_asset(name="Export Asset")
         self.login()
         self.grant_object_permission(Asset, ["view"])
 
         response = self.client.get(
-            reverse("plugins:netbox_smartlock:device_asset_list"),
+            reverse("plugins:netbox_smartlock:asset_list"),
             {"export": "table"},
         )
 
@@ -513,7 +550,7 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         self.grant_object_permission(Asset, ["view"])
 
         response = self.client.get(
-            reverse("plugins:netbox_smartlock:device_asset_list"),
+            reverse("plugins:netbox_smartlock:asset_list"),
             {"device_asset_export": "excel_report"},
         )
 
@@ -536,7 +573,7 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         self.grant_object_permission(Asset, ["view", "change"])
 
         response = self.client.get(
-            reverse("plugins:netbox_smartlock:device_asset_files", kwargs={"pk": asset.pk})
+            reverse("plugins:netbox_smartlock:asset_files", kwargs={"pk": asset.pk})
         )
 
         self.assertEqual(response.status_code, 200)
@@ -549,7 +586,7 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         self.grant_object_permission(Asset, ["view"])
 
         response = self.client.post(
-            reverse("plugins:netbox_smartlock:device_asset_files", kwargs={"pk": asset.pk}),
+            reverse("plugins:netbox_smartlock:asset_files", kwargs={"pk": asset.pk}),
             {
                 "upload_files": "[]",
                 "_update": "Lưu",
@@ -558,7 +595,7 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_device_detail_includes_asset_file_button_and_panel(self):
+    def test_device_detail_does_not_include_asset_file_button_or_panel(self):
         asset = self.make_device_asset(name="Detail File Asset")
         self.login()
         self.grant_object_permission(Asset, ["view", "change"])
@@ -567,12 +604,13 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         response = self.client.get(asset.device.get_absolute_url())
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "File tài sản")
-        self.assertContains(response, "File đính kèm tài sản")
+        self.assertNotContains(response, "File tài sản")
+        self.assertNotContains(response, "File đính kèm tài sản")
 
-    def test_device_detail_hides_asset_files_without_asset_view_permission(self):
+    def test_device_detail_stays_decoupled_from_asset_permissions(self):
         asset = self.make_device_asset(name="Hidden File Asset")
         self.login()
+        self.grant_object_permission(Asset, ["view", "change"])
         self.grant_object_permission(Device, ["view"])
 
         response = self.client.get(asset.device.get_absolute_url())
@@ -594,7 +632,7 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["exclude_from_visualization"])
 
-    def test_asset_api_exposes_asset_model_with_nested_dcim_device(self):
+    def test_asset_api_exposes_dicm_asset_fields_without_dcim_device(self):
         asset = self.make_device_asset(name="API Asset")
         self.login()
         self.grant_object_permission(Asset, ["view"])
@@ -607,8 +645,47 @@ class AssetGroupCoreImportTest(SmartLockIntegrationTestBase):
         payload = response.json()
         self.assertEqual(payload["name"], asset.name)
         self.assertEqual(payload["code"], asset.code)
-        self.assertEqual(payload["device"]["id"], asset.device_id)
+        self.assertNotIn("device", payload)
+        self.assertNotIn("device_id", payload)
         self.assertEqual(payload["asset_group"]["id"], self.asset_group.pk)
+        self.assertEqual(payload["device_type"], asset.device_type)
+        self.assertEqual(payload["manufacturer"], asset.manufacturer)
+        self.assertEqual(payload["site"]["id"], self.site.pk)
+        self.assertEqual(payload["location"]["id"], self.location.pk)
+
+    def test_asset_api_creates_dicm_asset_without_dcim_device(self):
+        self.login()
+        self.grant_object_permission(Asset, ["view", "add"])
+        self.grant_object_permission(AssetGroup, ["view"])
+        for model in (Region, Site, Location):
+            self.grant_object_permission(model, ["view"])
+
+        response = self.client.post(
+            reverse("plugins-api:netbox_smartlock-api:asset-list"),
+            data=json.dumps(
+                {
+                    "name": "API DICM Asset",
+                    "code": "ASSET-API-DICM",
+                    "asset_group_id": self.asset_group.pk,
+                    "status": Asset.STATUS_ACTIVE,
+                    "device_type": "Access Controller",
+                    "model": "AC-100",
+                    "serial": "SER-100",
+                    "manufacturer": "GTSC",
+                    "region_id": self.region.pk,
+                    "site_id": self.site.pk,
+                    "location_id": self.location.pk,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content.decode())
+        asset = Asset.objects.get(code="ASSET-API-DICM")
+        self.assertIsNone(asset.device)
+        self.assertEqual(asset.device_type, "Access Controller")
+        self.assertEqual(asset.site, self.site)
+        self.assertEqual(asset.location, self.location)
 
 
 class SmartLockCrudViewTest(SmartLockIntegrationTestBase):

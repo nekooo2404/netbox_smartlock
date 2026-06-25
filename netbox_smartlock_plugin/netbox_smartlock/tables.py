@@ -49,7 +49,7 @@ class AssetGroupTable(NetBoxTable):
     code = tables.Column(verbose_name="Mã")
     status = tables.Column(verbose_name="Trạng thái")
     description = tables.Column(verbose_name="Mô tả")
-    exclude_from_visualization = tables.BooleanColumn(verbose_name="Loại trừ khỏi visualization")
+    exclude_from_visualization = tables.BooleanColumn(verbose_name="Exclude from Visualization")
     created_by_name = tables.Column(verbose_name="Người tạo", order_by=("created_by_name",))
     created = tables.DateTimeColumn(verbose_name="Thời gian tạo")
     last_updated = tables.DateTimeColumn(verbose_name="Thời gian cập nhật")
@@ -133,13 +133,11 @@ class DeviceAssetTable(NetBoxTable):
     code = tables.Column(verbose_name="Mã")
     status = tables.Column(verbose_name="Trạng thái")
     asset_group = tables.Column(linkify=True, verbose_name="Nhóm tài sản")
-    device = tables.Column(linkify=True, verbose_name="Thiết bị")
-    site = tables.Column(accessor="device.site", linkify=True, verbose_name="Địa điểm")
-    location = tables.Column(accessor="device.location", linkify=True, verbose_name="Vị trí")
-    rack = tables.Column(accessor="device.rack", linkify=True, verbose_name="Tủ rack")
-    manufacturer = tables.Column(accessor="device.device_type.manufacturer", verbose_name="Hãng sản xuất")
-    device_type = tables.Column(accessor="device.device_type", linkify=True, verbose_name="Loại thiết bị")
-    serial = tables.Column(accessor="device.serial", verbose_name="Serial")
+    site = tables.Column(linkify=True, verbose_name="Địa điểm")
+    location = tables.Column(linkify=True, verbose_name="Vị trí")
+    manufacturer = tables.Column(verbose_name="Hãng sản xuất")
+    device_type = tables.Column(verbose_name="Loại thiết bị")
+    serial = tables.Column(verbose_name="Serial")
     setup_date = tables.DateColumn(verbose_name="Ngày lắp đặt")
     bought_date = tables.DateColumn(verbose_name="Ngày mua")
     warranty_period = tables.Column(verbose_name="Thời hạn bảo hành")
@@ -149,7 +147,7 @@ class DeviceAssetTable(NetBoxTable):
     created = tables.DateTimeColumn(verbose_name="Thời gian tạo")
     last_updated = tables.DateTimeColumn(verbose_name="Thời gian cập nhật")
     uploaded_file_count = tables.Column(verbose_name="Số file", orderable=False)
-    tags = columns.TagColumn(url_name="plugins:netbox_smartlock:device_asset_list")
+    tags = columns.TagColumn(url_name="plugins:netbox_smartlock:asset_list")
     actions = columns.ActionsColumn()
 
     def render_status(self, record):
@@ -165,8 +163,8 @@ class DeviceAssetTable(NetBoxTable):
     class Meta(NetBoxTable.Meta):
         model = Asset
         fields = (
-            "pk", "id", "name", "code", "status", "asset_group", "device",
-            "site", "location", "rack", "manufacturer", "device_type", "serial",
+            "pk", "id", "name", "code", "status", "asset_group",
+            "site", "location", "manufacturer", "device_type", "serial",
             "setup_date", "bought_date", "warranty_period", "warranty_expiration_date", "warranty_state",
             "created_by_name", "uploaded_file_count", "tags", "created", "last_updated", "actions",
         )

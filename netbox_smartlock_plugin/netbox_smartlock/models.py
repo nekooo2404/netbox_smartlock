@@ -109,7 +109,7 @@ class AssetGroup(OrganizationalModel):
 
 
 class Asset(NetBoxModel):
-    """Tài sản nghiệp vụ của SmartLock, liên kết tới thiết bị DCIM gốc của NetBox."""
+    """Tài sản nghiệp vụ độc lập theo DICM, có thể giữ liên kết Device cũ để đối soát."""
 
     STATUS_ACTIVE = "active"
     STATUS_BACKUP = "backup"
@@ -126,6 +126,8 @@ class Asset(NetBoxModel):
         Device,
         on_delete=models.PROTECT,
         related_name="smartlock_asset",
+        blank=True,
+        null=True,
         verbose_name="DCIM Device",
     )
     asset_group = models.ForeignKey(
@@ -147,6 +149,10 @@ class Asset(NetBoxModel):
         validators=[MaxLengthValidator(500)],
         verbose_name="Description",
     )
+    device_type = models.CharField(max_length=100, verbose_name="Device Type")
+    model = models.CharField(max_length=100, blank=True, verbose_name="Model")
+    serial = models.CharField(max_length=100, blank=True, verbose_name="Serial")
+    manufacturer = models.CharField(max_length=100, blank=True, verbose_name="Manufacturer")
     setup_date = models.DateField(blank=True, null=True, verbose_name="Setup Date")
     bought_date = models.DateField(blank=True, null=True, verbose_name="Purchase Date")
     warranty_period = models.PositiveIntegerField(
@@ -161,9 +167,33 @@ class Asset(NetBoxModel):
         editable=False,
         verbose_name="Warranty Expiration Date",
     )
+    region = models.ForeignKey(
+        Region,
+        on_delete=models.PROTECT,
+        related_name="smartlock_assets",
+        blank=True,
+        null=True,
+        verbose_name="Region",
+    )
+    site = models.ForeignKey(
+        Site,
+        on_delete=models.PROTECT,
+        related_name="smartlock_assets",
+        blank=True,
+        null=True,
+        verbose_name="Site",
+    )
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.PROTECT,
+        related_name="smartlock_assets",
+        blank=True,
+        null=True,
+        verbose_name="Location",
+    )
     comments = models.TextField(blank=True, default="", verbose_name="Comments")
 
-    clone_fields = ("device", "asset_group", "status")
+    clone_fields = ("asset_group", "status", "device_type", "region", "site", "location")
 
     class Meta:
         ordering = ("-last_updated", "name")
@@ -178,28 +208,8 @@ class Asset(NetBoxModel):
         return label_for(SMARTLOCK_STATUS_LABELS, self.status)
 
     @property
-    def site(self):
-        return self.device.site
-
-    @property
-    def location(self):
-        return self.device.location
-
-    @property
     def rack(self):
-        return self.device.rack
-
-    @property
-    def device_type(self):
-        return self.device.device_type
-
-    @property
-    def manufacturer(self):
-        return getattr(self.device.device_type, "manufacturer", None)
-
-    @property
-    def serial(self):
-        return self.device.serial
+        return self.device.rack if self.device_id else None
 
     def get_absolute_url(self):
         return reverse("plugins:netbox_smartlock:asset", kwargs={"pk": self.pk})
@@ -216,17 +226,54 @@ class Asset(NetBoxModel):
 
         if self.asset_group_id and getattr(self.asset_group, "status", None) != AssetGroup.STATUS_ACTIVE:
             errors["asset_group"] = "Chỉ được chọn nhóm tài sản đang hoạt động."
+
+        if self.location_id:
+            if self.site_id and self.location.site_id != self.site_id:
+                errors["location"] = "Vị trí phải thuộc địa điểm đã chọn."
+            else:
+                self.site = self.location.site
+
+        if self.site_id:
+            site_region_id = getattr(self.site, "region_id", None)
+            if self.region_id and site_region_id and site_region_id != self.region_id:
+                errors["site"] = "Địa điểm phải thuộc khu vực đã chọn."
+            elif site_region_id:
+                self.region = self.site.region
+
         if self.warranty_period is not None and not self.bought_date:
             errors["bought_date"] = "Bắt buộc nhập ngày mua khi thiết lập thời hạn bảo hành."
 
         if errors:
             raise ValidationError(errors)
 
+    def apply_device_defaults(self):
+        """Giữ dữ liệu cũ từ DCIM Device nếu bản ghi legacy chưa có field DICM trực tiếp."""
+        if not self.device_id:
+            return
+
+        if not self.site_id and getattr(self.device, "site_id", None):
+            self.site = self.device.site
+        if not self.location_id and getattr(self.device, "location_id", None):
+            self.location = self.device.location
+        if not self.region_id and getattr(self.site, "region_id", None):
+            self.region = self.site.region
+        if not self.device_type and getattr(self.device, "device_type", None):
+            self.device_type = normalize_text(str(self.device.device_type))
+        if not self.manufacturer and getattr(getattr(self.device, "device_type", None), "manufacturer", None):
+            self.manufacturer = normalize_text(str(self.device.device_type.manufacturer))
+        if not self.serial:
+            self.serial = normalize_text(getattr(self.device, "serial", ""))
+
     def save(self, *args, **kwargs):
         self.name = normalize_text(self.name)
         self.code = normalize_text(self.code)
+        self.device_type = normalize_text(self.device_type)
+        self.model = normalize_text(self.model)
+        self.serial = normalize_text(self.serial)
+        self.manufacturer = normalize_text(self.manufacturer)
         self.description = normalize_text(self.description)
         self.comments = normalize_text(self.comments)
+        self.apply_device_defaults()
         self.full_clean()
 
         if self.bought_date and self.warranty_period is not None:

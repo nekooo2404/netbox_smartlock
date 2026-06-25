@@ -5,7 +5,7 @@
 Plugin này hoạt động như một trường thông tin trong form nhập liệu, cho phép người dùng chọn và upload nhiều ảnh trực tiếp khi tạo hoặc chỉnh sửa đối tượng.
 
 Các tính năng nổi bật:
-- Upload nhiều ảnh cùng lúc (hỗ trợ các định dạng phổ biến: jpg, jpeg, png, gif, webp, bmp).
+- Upload nhiều ảnh cùng lúc (hỗ trợ các định dạng theo DCIM.md: jpg, jpeg, png).
 - Giao diện kéo thả hoặc chọn file đơn giản, trực quan ngay trong form nhập liệu.
 - Hiển thị danh sách ảnh vừa upload trong form.
 - Không hỗ trợ quản lý, xóa, tải về hoặc chỉnh sửa file sau khi lưu.

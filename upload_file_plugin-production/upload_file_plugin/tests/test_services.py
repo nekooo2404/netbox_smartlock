@@ -11,9 +11,10 @@ from upload_file_plugin.services import (
 
 class UploadFileServiceContractTest(SimpleTestCase):
     def test_image_extension_contract(self):
-        self.assertEqual(ALLOWED_IMAGE_EXTENSIONS, ("jpg", "jpeg", "png", "gif", "webp", "bmp"))
+        self.assertEqual(ALLOWED_IMAGE_EXTENSIONS, ("jpg", "jpeg", "png"))
         self.assertIn("image/png", IMAGE_ACCEPT_ATTRIBUTE)
         self.assertTrue(is_allowed_image("door.PNG"))
+        self.assertFalse(is_allowed_image("door.webp"))
         self.assertFalse(is_allowed_image("door.pdf"))
 
     def test_upload_size_limit_contract(self):

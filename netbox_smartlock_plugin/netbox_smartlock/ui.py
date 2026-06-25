@@ -115,7 +115,7 @@ class VietnameseAddObject(AddObject):
 class DeviceAssetAddObject(VietnameseAddObject):
     @classmethod
     def get_url(cls, obj):
-        return reverse("plugins:netbox_smartlock:device_asset_add")
+        return reverse("plugins:netbox_smartlock:asset_add")
 
 
 class VietnameseBulkImport(BulkImport):

@@ -100,148 +100,40 @@
             "multivalued": "true",
             "userinfo.token.claim": "true"
           }
+        },
+        {
+          "name": "dcim regions",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "dcim_regions",
+            "claim.name": "dcim_regions",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "aggregate.attrs": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "dcim sites",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "dcim_sites",
+            "claim.name": "dcim_sites",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "aggregate.attrs": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
         }
       ]
     }
-  ],
-  "components": {
-    "org.keycloak.storage.UserStorageProvider": [
-      {
-        "id": "ldap-internal",
-        "name": "ldap-internal",
-        "providerId": "ldap",
-        "providerType": "org.keycloak.storage.UserStorageProvider",
-        "parentId": "netbox-dev",
-        "config": {
-          "enabled": [
-            "true"
-          ],
-          "priority": [
-            "0"
-          ],
-          "fullSyncPeriod": [
-            "-1"
-          ],
-          "changedSyncPeriod": [
-            "-1"
-          ],
-          "cachePolicy": [
-            "DEFAULT"
-          ],
-          "editMode": [
-            "READ_ONLY"
-          ],
-          "importEnabled": [
-            "true"
-          ],
-          "syncRegistrations": [
-            "false"
-          ],
-          "vendor": [
-            "other"
-          ],
-          "connectionUrl": [
-            "ldap://ldap:389"
-          ],
-          "connectionPooling": [
-            "true"
-          ],
-          "authType": [
-            "simple"
-          ],
-          "bindDn": [
-            "cn=admin,dc=example,dc=org"
-          ],
-          "bindCredential": [
-            "admin"
-          ],
-          "usersDn": [
-            "ou=users,dc=example,dc=org"
-          ],
-          "usernameLDAPAttribute": [
-            "uid"
-          ],
-          "rdnLDAPAttribute": [
-            "uid"
-          ],
-          "uuidLDAPAttribute": [
-            "entryUUID"
-          ],
-          "userObjectClasses": [
-            "inetOrgPerson, organizationalPerson"
-          ],
-          "searchScope": [
-            "1"
-          ],
-          "pagination": [
-            "false"
-          ],
-          "batchSizeForSync": [
-            "1000"
-          ],
-          "validatePasswordPolicy": [
-            "false"
-          ],
-          "trustEmail": [
-            "true"
-          ],
-          "useTruststoreSpi": [
-            "ldapsOnly"
-          ],
-          "allowKerberosAuthentication": [
-            "false"
-          ],
-          "useKerberosForPasswordAuthentication": [
-            "false"
-          ]
-        }
-      }
-    ],
-    "org.keycloak.storage.ldap.mappers.LDAPStorageMapper": [
-      {
-        "name": "groups",
-        "providerId": "group-ldap-mapper",
-        "providerType": "org.keycloak.storage.ldap.mappers.LDAPStorageMapper",
-        "parentId": "ldap-internal",
-        "config": {
-          "mode": [
-            "READ_ONLY"
-          ],
-          "groups.dn": [
-            "ou=groups,dc=example,dc=org"
-          ],
-          "group.name.ldap.attribute": [
-            "cn"
-          ],
-          "group.object.classes": [
-            "groupOfNames"
-          ],
-          "preserve.group.inheritance": [
-            "true"
-          ],
-          "membership.ldap.attribute": [
-            "member"
-          ],
-          "membership.attribute.type": [
-            "DN"
-          ],
-          "membership.user.ldap.attribute": [
-            "uid"
-          ],
-          "user.roles.retrieve.strategy": [
-            "LOAD_GROUPS_BY_MEMBER_ATTRIBUTE"
-          ],
-          "memberof.ldap.attribute": [
-            "memberOf"
-          ],
-          "groups.path": [
-            "/"
-          ],
-          "ignore.missing.groups": [
-            "true"
-          ]
-        }
-      }
-    ]
-  }
+  ]
 }

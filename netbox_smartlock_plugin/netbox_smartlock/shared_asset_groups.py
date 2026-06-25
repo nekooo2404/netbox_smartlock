@@ -11,11 +11,9 @@ def assets_for_asset_group(asset_group, user=None):
     queryset = (
         Asset.objects.select_related(
             "asset_group",
-            "device",
-            "device__device_type__manufacturer",
-            "device__site",
-            "device__location",
-            "device__rack",
+            "region",
+            "site",
+            "location",
         )
         .filter(asset_group=asset_group)
     )

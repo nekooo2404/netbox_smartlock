@@ -56,9 +56,9 @@ This repository includes `docker-compose.keycloak.yml` for local Keycloak SSO.
 The local architecture is LDAP -> Keycloak -> OIDC -> NetBox. NetBox does not connect to LDAP directly.
 
 It imports realm `netbox-dev`, client `netbox-dev`, roles `dcim-admin`/`dcim-guest`,
-Keycloak groups `Admin`/`Guest`, and starts an internal LDAP service with demo users
-`ldap-admin` and `ldap-guest`. LDAP is the identity source for internal app users;
-NetBox does not connect to LDAP directly.
+Keycloak groups `Admin`/`Guest`, OIDC claims `dcim_regions`/`dcim_sites`, and starts
+an internal LDAP service with demo users `ldap-admin` and `ldap-guest`. LDAP is the
+identity source for internal app users; NetBox does not connect to LDAP directly.
 
 Run NetBox with Keycloak:
 
@@ -72,6 +72,10 @@ Apply LDAP federation, role/group mappers, and trigger LDAP sync:
 powershell -ExecutionPolicy Bypass -File .\keycloak\configure-ldap-oidc.ps1
 ```
 
+The configure script is idempotent. It also updates the OIDC client secret,
+redirect URIs, web origins, post-logout redirect URIs, LDAP connection, LDAP
+attribute mappers, and OIDC claims from environment variables.
+
 Bootstrap NetBox RBAC for the synced `Admin`/`Guest` groups:
 
 ```powershell
@@ -81,7 +85,48 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-co
 OpenID discovery:
 
 ```text
-http://keycloak.local:8080/realms/netbox-dev/.well-known/openid-configuration
+http://keycloak.localtest.me:8080/realms/netbox-dev/.well-known/openid-configuration
+```
+
+NetBox OAuth providers follow the NetBox Google and Okta-style documentation.
+Google is configured as a direct NetBox OAuth2 backend:
+
+```text
+http://localhost:8000/oauth/complete/google-oauth2/
+http://netbox.localtest.me:8000/oauth/complete/google-oauth2/
+```
+
+Keycloak is configured like an Okta-style OIDC provider, using NetBox's generic
+OIDC backend. Add these redirect/sign-out URIs to the Keycloak client:
+
+```text
+http://localhost:8000/oauth/complete/oidc/
+http://netbox.localtest.me:8000/oauth/complete/oidc/
+http://localhost:8000/oauth/disconnect/oidc/
+http://netbox.localtest.me:8000/oauth/disconnect/oidc/
+```
+
+The relevant NetBox environment variables are:
+
+```env
+REMOTE_AUTH_ENABLED=True
+REMOTE_AUTH_AUTO_CREATE_USER=True
+REMOTE_AUTH_BACKEND=social_core.backends.google.GoogleOAuth2 social_core.backends.open_id_connect.OpenIdConnectAuth
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY=<google-client-id>
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET=<google-client-secret>
+SOCIAL_AUTH_OIDC_KEY=netbox-dev
+SOCIAL_AUTH_OIDC_SECRET=<keycloak-client-secret>
+SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=http://keycloak.localtest.me:8080/realms/netbox-dev
+```
+
+Both providers appear on the normal NetBox `/login/` page. Google direct login
+does not carry Keycloak Region/Site claims; the custom Keycloak group/scope sync
+only runs for the `oidc` backend.
+
+End-to-end verification from the repository root:
+
+```powershell
+python netbox-docker\keycloak\verify_ldap_oidc_flow.py
 ```
 
 Credentials:
@@ -102,6 +147,9 @@ KEYCLOAK_GROUP_SYNC_GROUPS=Admin Guest
 KEYCLOAK_GROUP_SYNC_REMOVE=True
 KEYCLOAK_GROUP_SYNC_GROUP_MAP=dcim-admin=Admin dcim-guest=Guest
 KEYCLOAK_GROUP_SYNC_ROLE_MAP=dcim-admin=Admin dcim-guest=Guest
+KEYCLOAK_SCOPE_SYNC_ENABLED=True
+KEYCLOAK_SCOPE_SYNC_REGION_CLAIM=dcim_regions
+KEYCLOAK_SCOPE_SYNC_SITE_CLAIM=dcim_sites
 ```
 
 Only the allow-listed groups are managed by the pipeline. Existing local NetBox
@@ -110,9 +158,36 @@ groups outside that list are left untouched.
 The SmartLock plugin API accepts Keycloak Bearer JWTs on `/api/plugins/smartlock/...`.
 Tokens must be issued by realm `netbox-dev` for client `netbox-dev`.
 
-Region/Site scope remains enforced by NetBox ObjectPermission constraints. Use
-`smartlock_bootstrap_rbac` for the default local setup, then tighten Region/Site
-constraints in NetBox for customer- or tenant-specific access.
+Region/Site scope is managed by Keycloak attributes/claims:
+
+```json
+{
+  "dcim_regions": ["region-1"],
+  "dcim_sites": ["site-1"]
+}
+```
+
+On each OIDC login or plugin API JWT request, the pipeline creates user-specific
+NetBox ObjectPermissions with prefix `SmartLock Keycloak Scope`. NetBox still
+enforces all UI/API scope through ObjectPermission constraints; Keycloak is the
+source for the Region/Site values. When `KEYCLOAK_SCOPE_SYNC_ENABLED=True`,
+`smartlock_bootstrap_rbac` does not grant broad DCIM Region/Site permissions to
+the `Admin`/`Guest` groups.
+
+Production hardening:
+
+- Use HTTPS public domains for NetBox and Keycloak, and update `ALLOWED_HOSTS`,
+  `CSRF_TRUSTED_ORIGINS`, Keycloak redirect URIs, `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT`,
+  and `LOGOUT_REDIRECT_URL`.
+- Enable `SECURE_SSL_REDIRECT=True` and HSTS after TLS is in place.
+- Replace all dev secrets and use Docker/Kubernetes secrets for `SECRET_KEY`,
+  database/Redis passwords, OIDC client secret, Keycloak admin password, and LDAP
+  bind password.
+- Use LDAPS for LDAP federation, for example
+  `KEYCLOAK_LDAP_CONNECTION_URL=ldaps://ldap.example.com:636`.
+- Keep NetBox's normal `/login/` page enabled when following the official
+  NetBox OAuth examples. OAuth provider buttons are rendered beside the local
+  login form.
 
 To create the first admin user run this command:
 

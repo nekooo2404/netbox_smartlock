@@ -280,8 +280,7 @@ class DeviceAssetListView(ObjectListView):
     queryset = annotate_creator(
         annotate_file_count(
             Asset.objects.select_related(
-                "asset_group", "device", "device__device_type__manufacturer",
-                "device__site", "device__location", "device__rack",
+                "asset_group", "region", "site", "location",
             ).prefetch_related("tags"),
             model_name="asset",
         )
@@ -320,8 +319,7 @@ class DeviceAssetListView(ObjectListView):
 
 class DeviceAssetView(ObjectView):
     queryset = Asset.objects.select_related(
-        "asset_group", "device", "device__device_type__manufacturer",
-        "device__site", "device__location", "device__rack",
+        "asset_group", "region", "site", "location",
     ).prefetch_related("tags")
     template_name = "netbox_smartlock/device_asset.html"
     actions = VIETNAMESE_DETAIL_ACTIONS_WITHOUT_CLONE
@@ -340,7 +338,6 @@ class DeviceAssetView(ObjectView):
             .first()
         )
         return apply_model_label_context({
-            "device": instance.device,
             "uploaded_files": files_for_object(instance, model_name="asset"),
             "warranty_state": warranty_state,
             "warranty_state_badge": warranty_state_badge(warranty_state),
@@ -351,10 +348,10 @@ class DeviceAssetView(ObjectView):
 
 
 class DeviceAssetEditView(VietnameseModelLabelMixin, ObjectEditView):
-    queryset = Asset.objects.select_related("device", "asset_group")
+    queryset = Asset.objects.select_related("asset_group", "region", "site", "location")
     form = DeviceAssetForm
     template_name = "netbox_smartlock/object_edit_cancel_confirm.html"
-    default_return_url = "plugins:netbox_smartlock:device_asset_list"
+    default_return_url = "plugins:netbox_smartlock:asset_list"
 
     def dispatch(self, request, *args, **kwargs):
         self.form = request_scoped_form(DeviceAssetForm, request_user=request.user)
@@ -376,9 +373,9 @@ class DeviceAssetEditView(VietnameseModelLabelMixin, ObjectEditView):
 
 
 class DeviceAssetDeleteView(VietnameseModelLabelMixin, ObjectDeleteView):
-    queryset = Asset.objects.select_related("device", "asset_group")
+    queryset = Asset.objects.select_related("asset_group", "region", "site", "location")
     template_name = "netbox_smartlock/object_delete.html"
-    default_return_url = "plugins:netbox_smartlock:device_asset_list"
+    default_return_url = "plugins:netbox_smartlock:asset_list"
 
     def get_return_url(self, request, obj=None):
         return_url = request.GET.get("return_url") or request.POST.get("return_url")
@@ -396,7 +393,7 @@ class DeviceAssetDeleteView(VietnameseModelLabelMixin, ObjectDeleteView):
 
 
 class DeviceAssetFileView(VietnameseModelLabelMixin, ObjectEditView):
-    queryset = Asset.objects.select_related("device", "asset_group")
+    queryset = Asset.objects.select_related("asset_group", "region", "site", "location")
     form = DeviceAssetFileForm
     template_name = "netbox_smartlock/device_asset_files.html"
 
@@ -414,9 +411,8 @@ class DeviceAssetFileView(VietnameseModelLabelMixin, ObjectEditView):
     def get_extra_context(self, request, instance=None):
         context = super().get_extra_context(request, instance)
         context.update({
-            "device": instance.device if instance else None,
             "uploaded_files": files_for_object(instance, model_name="asset") if instance else (),
-            "return_url": instance.get_absolute_url() if instance else reverse("plugins:netbox_smartlock:device_asset_list"),
+            "return_url": instance.get_absolute_url() if instance else reverse("plugins:netbox_smartlock:asset_list"),
             "smartlock_model_label": "file đính kèm tài sản",
         })
         return context

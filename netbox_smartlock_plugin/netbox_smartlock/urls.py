@@ -80,20 +80,15 @@ urlpatterns = [
         kwargs={"model": AssetGroup},
     ),
 
-    # --- Asset backed by DCIM Device ---
-    path("assets/devices/", views.DeviceAssetListView.as_view(), name="device_asset_list"),
-    path("assets/devices/", views.DeviceAssetListView.as_view(), name="asset_list"),
-    path("assets/devices/add/", views.DeviceAssetEditView.as_view(), name="device_asset_add"),
-    path("assets/devices/add/", views.DeviceAssetEditView.as_view(), name="asset_add"),
-    path("assets/devices/<int:pk>/", views.DeviceAssetView.as_view(), name="device_asset"),
-    path("assets/devices/<int:pk>/", views.DeviceAssetView.as_view(), name="asset"),
-    path("assets/devices/<int:pk>/edit/", views.DeviceAssetEditView.as_view(), name="device_asset_edit"),
-    path("assets/devices/<int:pk>/edit/", views.DeviceAssetEditView.as_view(), name="asset_edit"),
-    path("assets/devices/<int:pk>/delete/", views.DeviceAssetDeleteView.as_view(), name="device_asset_delete"),
-    path("assets/devices/<int:pk>/delete/", views.DeviceAssetDeleteView.as_view(), name="asset_delete"),
-    path("assets/devices/<int:pk>/files/", views.DeviceAssetFileView.as_view(), name="device_asset_files"),
+    # --- Asset ---
+    path("assets/", views.DeviceAssetListView.as_view(), name="asset_list"),
+    path("assets/add/", views.DeviceAssetEditView.as_view(), name="asset_add"),
+    path("assets/<int:pk>/", views.DeviceAssetView.as_view(), name="asset"),
+    path("assets/<int:pk>/edit/", views.DeviceAssetEditView.as_view(), name="asset_edit"),
+    path("assets/<int:pk>/delete/", views.DeviceAssetDeleteView.as_view(), name="asset_delete"),
+    path("assets/<int:pk>/files/", views.DeviceAssetFileView.as_view(), name="asset_files"),
     path(
-        "assets/devices/<int:pk>/changelog/",
+        "assets/<int:pk>/changelog/",
         views.ScopedObjectChangeLogView.as_view(),
         name="asset_changelog",
         kwargs={"model": Asset},

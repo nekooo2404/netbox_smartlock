@@ -17,6 +17,8 @@ givenName: LDAP
 uid: ldap-admin
 mail: ldap-admin@example.org
 userPassword: admin
+businessCategory: region-1
+departmentNumber: site-1
 
 dn: uid=ldap-guest,ou=users,dc=example,dc=org
 objectClass: inetOrgPerson
@@ -29,6 +31,8 @@ givenName: LDAP
 uid: ldap-guest
 mail: ldap-guest@example.org
 userPassword: guest
+businessCategory: region-1
+departmentNumber: site-1
 
 dn: cn=dcim-admin,ou=groups,dc=example,dc=org
 objectClass: groupOfNames

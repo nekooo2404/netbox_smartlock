@@ -26,7 +26,7 @@
           <tr><th scope="row">Slug</th><td><code>{{ object.slug }}</code></td></tr>
           <tr><th scope="row">Mã</th><td>{{ object.code|default:"-" }}</td></tr>
           <tr><th scope="row">Trạng thái</th><td>{{ object.status_label }}</td></tr>
-          <tr><th scope="row">Loại trừ khỏi visualization</th><td>{% checkmark object.exclude_from_visualization %}</td></tr>
+          <tr><th scope="row">Exclude from Visualization</th><td>{% checkmark object.exclude_from_visualization %}</td></tr>
           <tr><th scope="row">Mô tả</th><td>{{ object.description|default:"-" }}</td></tr>
           <tr>
             <th scope="row">File đính kèm</th>
@@ -59,8 +59,8 @@
       <div class="card-body">
         {% if device_assets %}
           <ul class="list-unstyled mb-0">
-            {% for device in device_assets %}
-              <li><a href="{{ device.get_absolute_url }}">{{ device }}</a></li>
+            {% for asset in device_assets %}
+              <li><a href="{{ asset.get_absolute_url }}">{{ asset }}</a></li>
             {% endfor %}
           </ul>
           {% if device_assets_count > device_assets|length %}

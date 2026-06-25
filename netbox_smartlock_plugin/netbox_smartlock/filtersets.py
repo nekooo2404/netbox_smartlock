@@ -159,26 +159,21 @@ class DeviceAssetFilterSet(NetBoxModelFilterSet):
         label="Nhóm tài sản",
     )
     site_id = django_filters.ModelMultipleChoiceFilter(
-        field_name="device__site",
+        field_name="site",
         queryset=Site.objects.all(),
         label="Địa điểm",
     )
     location_id = django_filters.ModelMultipleChoiceFilter(
-        field_name="device__location",
+        field_name="location",
         queryset=Location.objects.all(),
         label="Vị trí",
-    )
-    rack_id = django_filters.ModelMultipleChoiceFilter(
-        field_name="device__rack",
-        queryset=Rack.objects.all(),
-        label="Tủ rack",
     )
 
     class Meta:
         model = Asset
         fields = (
-            "id", "name", "code", "status", "asset_group_id", "device",
-            "site_id", "location_id", "rack_id",
+            "id", "name", "code", "status", "asset_group_id",
+            "site_id", "location_id", "device_type", "manufacturer", "serial",
         )
 
     def search(self, queryset, name, value):
@@ -190,14 +185,11 @@ class DeviceAssetFilterSet(NetBoxModelFilterSet):
             | Q(asset_group__name__icontains=value)
             | Q(asset_group__code__icontains=value)
             | Q(asset_group__slug__icontains=value)
-            | Q(device__name__icontains=value)
-            | Q(device__asset_tag__icontains=value)
-            | Q(device__serial__icontains=value)
-            | Q(device__device_type__model__icontains=value)
-            | Q(device__device_type__manufacturer__name__icontains=value)
-            | Q(device__site__name__icontains=value)
-            | Q(device__location__name__icontains=value)
-            | Q(device__rack__name__icontains=value)
+            | Q(device_type__icontains=value)
+            | Q(manufacturer__icontains=value)
+            | Q(serial__icontains=value)
+            | Q(site__name__icontains=value)
+            | Q(location__name__icontains=value)
         )
         if status_values:
             predicate |= Q(status__in=status_values)

@@ -7,7 +7,7 @@
   data-object-id="{{ object_id }}"
   data-model-name="{{ model_name }}"
   data-valid-flag="{{ valid_flg|default:'0' }}"
-  data-type-file="{{ type_file|default:'[\"jpg\", \"jpeg\", \"png\", \"gif\", \"webp\", \"bmp\"]' }}"
+  data-type-file="{{ type_file|default:'[\"jpg\", \"jpeg\", \"png\"]' }}"
 >
   <input type="hidden" class="nbx-upload-all-files" name="all_files">
   <input type="hidden" class="nbx-upload-uploaded-files" name="uploaded_files_json">
@@ -16,7 +16,7 @@
     type="file"
     class="d-none nbx-upload-input"
     name="files"
-    accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,image/jpeg,image/png,image/gif,image/webp,image/bmp"
+    accept=".jpg,.jpeg,.png,image/jpeg,image/png"
     multiple
   >
 
@@ -29,7 +29,7 @@
     </div>
   </div>
 
-  <div class="form-text">Ảnh được tải lên tạm thời và chỉ gắn vào đối tượng sau khi lưu. Hỗ trợ: jpg, jpeg, png, gif, webp, bmp. Giới hạn: 25MB mỗi file.</div>
+  <div class="form-text">Ảnh được tải lên tạm thời và chỉ gắn vào đối tượng sau khi lưu. Hỗ trợ: jpg, jpeg, png. Giới hạn: 25MB mỗi file.</div>
   <div class="alert alert-danger d-none mt-2 nbx-upload-errors"></div>
   <div class="list-group mt-2 nbx-upload-list"></div>
 </div>

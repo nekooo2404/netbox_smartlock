@@ -14,9 +14,9 @@ from .models import UploadedFile
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_IMAGE_EXTENSIONS = ("jpg", "jpeg", "png", "gif", "webp", "bmp")
+ALLOWED_IMAGE_EXTENSIONS = ("jpg", "jpeg", "png")
 ALLOWED_IMAGE_EXTENSION_SET = set(ALLOWED_IMAGE_EXTENSIONS)
-IMAGE_ACCEPT_ATTRIBUTE = ".jpg,.jpeg,.png,.gif,.webp,.bmp,image/jpeg,image/png,image/gif,image/webp,image/bmp"
+IMAGE_ACCEPT_ATTRIBUTE = ".jpg,.jpeg,.png,image/jpeg,image/png"
 MAX_UPLOAD_FILE_SIZE = 25 * 1024 * 1024
 
 

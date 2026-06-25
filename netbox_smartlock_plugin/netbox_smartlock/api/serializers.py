@@ -1,9 +1,8 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Q
 from netbox.api.serializers import NetBoxModelSerializer
 from rest_framework import serializers
-from dcim.api.serializers import DeviceSerializer, LocationSerializer, RackSerializer, RegionSerializer, SiteSerializer
-from dcim.models import Device, Location, Rack, Region, Site
+from dcim.api.serializers import LocationSerializer, RackSerializer, RegionSerializer, SiteSerializer
+from dcim.models import Location, Rack, Region, Site
 from upload_file_plugin.services import sync_uploaded_files
 
 from ..messages import (
@@ -45,21 +44,45 @@ class AssetGroupSerializer(NetBoxModelSerializer):
 
 class AssetSerializer(NetBoxModelSerializer):
     url = serializers.HyperlinkedIdentityField(view_name="plugins-api:netbox_smartlock-api:asset-detail")
-    device = DeviceSerializer(nested=True, read_only=True)
-    device_id = serializers.PrimaryKeyRelatedField(queryset=Device.objects.all(), source="device", write_only=True)
     asset_group = AssetGroupSerializer(nested=True, read_only=True)
     asset_group_id = serializers.PrimaryKeyRelatedField(queryset=AssetGroup.objects.all(), source="asset_group", write_only=True)
+    region = RegionSerializer(nested=True, read_only=True, required=False)
+    region_id = serializers.PrimaryKeyRelatedField(
+        queryset=Region.objects.all(),
+        source="region",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    site = SiteSerializer(nested=True, read_only=True, required=False)
+    site_id = serializers.PrimaryKeyRelatedField(
+        queryset=Site.objects.all(),
+        source="site",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    location = LocationSerializer(nested=True, read_only=True, required=False)
+    location_id = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(),
+        source="location",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
 
     class Meta:
         model = Asset
         fields = (
             "id", "url", "display",
             "name", "code", "status", "description", "comments",
-            "device", "device_id", "asset_group", "asset_group_id",
+            "asset_group", "asset_group_id",
+            "device_type", "model", "serial", "manufacturer",
             "setup_date", "bought_date", "warranty_period", "warranty_expiration_date",
+            "region", "region_id", "site", "site_id", "location", "location_id",
             "tags", "created", "last_updated",
         )
-        brief_fields = ("id", "url", "display", "name", "code", "status", "device", "asset_group")
+        brief_fields = ("id", "url", "display", "name", "code", "status", "asset_group", "site", "location")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -71,16 +94,7 @@ class AssetSerializer(NetBoxModelSerializer):
             asset_group_queryset = asset_group_queryset.restrict(request_user, "view")
         self.fields["asset_group_id"].queryset = asset_group_queryset
 
-        device_queryset = Device.objects.all()
-        if request_user is not None and hasattr(device_queryset, "restrict"):
-            device_queryset = device_queryset.restrict(request_user, "view")
-        if isinstance(self.instance, Asset):
-            device_queryset = device_queryset.filter(
-                Q(smartlock_asset__isnull=True) | Q(pk=self.instance.device_id)
-            )
-        else:
-            device_queryset = device_queryset.filter(smartlock_asset__isnull=True)
-        self.fields["device_id"].queryset = device_queryset.distinct()
+        restrict_dcim_serializer_fields(self.fields, request_user)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)

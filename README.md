@@ -13,8 +13,8 @@ Plugin NetBox để quản lý tài sản, thiết bị Smart Lock và quy trìn
 ### Tài Sản Và Thiết Bị
 
 - Quản lý `Nhóm tài sản`.
-- Quản lý `Tài sản` liên kết với `Device` của NetBox.
-- Tài sản dùng dữ liệu NetBox cho Site, Location, Rack, loại thiết bị, hãng sản xuất, serial và asset tag.
+- Quản lý `Tài sản` nghiệp vụ độc lập theo DCIM.md.
+- Tài sản dùng các trường riêng cho nhóm tài sản, trạng thái, Site, Location, loại thiết bị, hãng sản xuất, serial và bảo hành.
 - Hỗ trợ lọc, tìm kiếm, `Configure Table`, import/export CSV mặc định của NetBox và export Excel.
 - Hỗ trợ file đính kèm qua upload plugin.
 
@@ -40,7 +40,7 @@ Plugin NetBox để quản lý tài sản, thiết bị Smart Lock và quy trìn
 
 - Widget upload dùng giao diện tiếng Việt thống nhất với plugin.
 - Hỗ trợ kéo thả hoặc chọn file.
-- Hỗ trợ ảnh: `jpg`, `jpeg`, `png`, `gif`, `webp`, `bmp`.
+- Hỗ trợ file ảnh theo DCIM.md: `jpg`, `jpeg`, `png`.
 - Giới hạn dung lượng: `25MB` mỗi file.
 - File được upload tạm thời và chỉ gắn vào đối tượng sau khi form chính được lưu.
 
@@ -146,8 +146,8 @@ http://localhost:8000
 Repo co san overlay `netbox-docker/docker-compose.keycloak.yml` de chay Keycloak lam IAM hub cho moi truong dev.
 Mo hinh local la LDAP -> Keycloak -> OIDC -> NetBox. NetBox khong ket noi LDAP truc tiep.
 
-Overlay nay import realm `netbox-dev`, client OIDC `netbox-dev`, role `dcim-admin`/`dcim-guest`, va group Keycloak `Admin`/`Guest` de map xuong NetBox.
-LDAP dev service seed user noi bo `ldap-admin`/`ldap-guest` va group LDAP `dcim-admin`/`dcim-guest`. Day la nguon user noi bo chuan; NetBox khong dang nhap truc tiep LDAP va khong can user local trong Keycloak cho app.
+Overlay nay import realm `netbox-dev`, client OIDC `netbox-dev`, role `dcim-admin`/`dcim-guest`, group Keycloak `Admin`/`Guest`, va claim scope `dcim_regions`/`dcim_sites` de map xuong NetBox.
+LDAP dev service seed user noi bo `ldap-admin`/`ldap-guest`, group LDAP `dcim-admin`/`dcim-guest`, va scope mau `region-1`/`site-1`. Day la nguon user noi bo chuan; NetBox khong dang nhap truc tiep LDAP va khong can user local trong Keycloak cho app.
 
 Chay NetBox kem Keycloak:
 
@@ -173,7 +173,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-co
 Keycloak Admin Console:
 
 ```text
-http://keycloak.local:8080
+http://keycloak.localtest.me:8080
 ```
 
 Tai khoan dev mac dinh:
@@ -208,18 +208,45 @@ Neu tao lai client secret trong Keycloak, cap nhat bien nay trong `netbox-docker
 SOCIAL_AUTH_OIDC_SECRET=<client-secret-moi>
 ```
 
-Callback URL cua NetBox trong Keycloak phai gom:
+OAuth cua NetBox duoc cau hinh theo dung mau docs Google va Okta-style OIDC.
+Google la backend truc tiep cua NetBox, nen Google Cloud OAuth client phai co
+redirect URI:
+
+```text
+http://localhost:8000/oauth/complete/google-oauth2/
+http://netbox.localtest.me:8000/oauth/complete/google-oauth2/
+```
+
+Keycloak dong vai tro OIDC provider giong cach docs Okta tao OIDC app. Callback
+URL cua NetBox trong Keycloak phai gom:
 
 ```text
 http://localhost:8000/oauth/complete/oidc/
 http://netbox.localtest.me:8000/oauth/complete/oidc/
+http://localhost:8000/oauth/disconnect/oidc/
+http://netbox.localtest.me:8000/oauth/disconnect/oidc/
 ```
+
+Hai backend nay cung hien tren man `/login/` mac dinh cua NetBox:
+
+```env
+REMOTE_AUTH_BACKEND=social_core.backends.google.GoogleOAuth2 social_core.backends.open_id_connect.OpenIdConnectAuth
+```
+
+Google direct login khong co claim Keycloak `groups`, `dcim_regions`,
+`dcim_sites`; pipeline sync group/scope chi chay cho backend `oidc`.
 
 De kiem tra NetBox container doc duoc discovery endpoint cua Keycloak:
 
 ```powershell
 cd netbox-docker
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox curl http://keycloak.local:8080/realms/netbox-dev/.well-known/openid-configuration
+docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox curl http://keycloak.localtest.me:8080/realms/netbox-dev/.well-known/openid-configuration
+```
+
+Kiem tra end-to-end LDAP -> Keycloak -> OIDC -> NetBox API cho `ldap-admin` va `ldap-guest`:
+
+```powershell
+python netbox-docker\keycloak\verify_ldap_oidc_flow.py
 ```
 
 Luu y phan quyen: plugin SmartLock dang dung group NetBox ten `Admin` cho cac thao tac quan tri phieu va danh muc tai san/Smart Lock; group `Guest` cho nguoi dung khach/doi tac.
@@ -231,13 +258,35 @@ KEYCLOAK_GROUP_SYNC_GROUPS=Admin Guest
 KEYCLOAK_GROUP_SYNC_REMOVE=True
 KEYCLOAK_GROUP_SYNC_GROUP_MAP=dcim-admin=Admin dcim-guest=Guest
 KEYCLOAK_GROUP_SYNC_ROLE_MAP=dcim-admin=Admin dcim-guest=Guest
+KEYCLOAK_SCOPE_SYNC_ENABLED=True
+KEYCLOAK_SCOPE_SYNC_REGION_CLAIM=dcim_regions
+KEYCLOAK_SCOPE_SYNC_SITE_CLAIM=dcim_sites
 ```
 
 Pipeline chi quan ly cac group nam trong `KEYCLOAK_GROUP_SYNC_GROUPS`; cac group NetBox local khac duoc giu nguyen. Neu token/userinfo khong co claim `groups` hoac `roles`, pipeline bo qua sync de tranh xoa nham quyen.
 
+Region/Site scope duoc quan ly tu Keycloak bang claim:
+
+```json
+{
+  "dcim_regions": ["region-1"],
+  "dcim_sites": ["site-1"]
+}
+```
+
+Khi user login OIDC hoac goi plugin API bang Keycloak JWT, pipeline tao/cap nhat ObjectPermission rieng cho user voi prefix `SmartLock Keycloak Scope`. NetBox van enforce quyen bang `.restrict(user, "view")`, nen UI/API chi thay Region/Site/Location/Rack/Device va object SmartLock nam trong scope claim. Neu claim scope bi thieu, pipeline giu nguyen permission hien co de tranh tu khoa do mapper loi; neu claim co nhung rong, permission scope cu bi xoa.
+
 Plugin API SmartLock nhan Bearer JWT tu Keycloak tren cac endpoint `/api/plugins/smartlock/...`; token phai co issuer realm `netbox-dev` va client `netbox-dev`.
 
-Quyen Region/Site/Location/Rack/Device va cac object plugin duoc NetBox enforce bang ObjectPermission. Command `smartlock_bootstrap_rbac` cap scope mac dinh; neu can scope theo khach hang/LDAP group rieng, tao ObjectPermission co `constraints` theo Region/Site tuong ung trong NetBox hoac mo rong claim Keycloak rieng cho domain do.
+Khi `KEYCLOAK_SCOPE_SYNC_ENABLED=True`, command `smartlock_bootstrap_rbac` chi tao RBAC group nen va khong cap quyen DCIM rong cho `Admin`/`Guest`; quyen Region/Site den tu Keycloak claim. Khi tat scope sync, command quay ve cach cu va cap scope mac dinh trong NetBox.
+
+Production hardening:
+
+- Dung domain HTTPS thong nhat, vi du `https://netbox.example.com` va `https://sso.example.com`; cap nhat `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, callback URL Keycloak, `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT`, va `LOGOUT_REDIRECT_URL`.
+- Bat `SECURE_SSL_REDIRECT=True`, `SECURE_HSTS_SECONDS=31536000`, `SECURE_HSTS_INCLUDE_SUBDOMAINS=True`; chi bat `SECURE_HSTS_PRELOAD=True` khi domain san sang preload.
+- Doi tat ca secret dev: `SECRET_KEY`, `API_TOKEN_PEPPER_1`, database/Redis password, `SOCIAL_AUTH_OIDC_SECRET`, Keycloak admin password, LDAP bind password. Uu tien Docker/Kubernetes secrets thay vi commit vao `.env`.
+- Dung LDAPS tu Keycloak den LDAP: `KEYCLOAK_LDAP_CONNECTION_URL=ldaps://ldap.example.com:636` va `KEYCLOAK_LDAP_USE_TRUSTSTORE_SPI=always`.
+- Giu man `/login/` mac dinh cua NetBox khi lam theo docs OAuth chinh thuc. Nut OAuth provider hien canh form local login; khong dung `break_glass=1`.
 
 Neu database dev da tung dang nhap OIDC truoc khi cau hinh on dinh, co the co user trung email. Kiem tra association OIDC:
 
