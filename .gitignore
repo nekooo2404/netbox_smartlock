@@ -73,6 +73,9 @@ logs/
 # Docker / local runtime artifacts
 netbox-docker/.env
 netbox-docker/env/*.local
+netbox-docker/secrets/*
+!netbox-docker/secrets/*.example
+!netbox-docker/secrets/README.md
 netbox-docker/media/
 netbox-docker/staticfiles/
 netbox-docker/reports/
@@ -90,3 +93,6 @@ smartlock/media/
 # Upload plugin runtime media/cache when used outside Docker volumes
 upload_file_plugin-production/media/
 upload_file_plugin-production/staticfiles/
+
+# Local agent memory
+.understand-anything/

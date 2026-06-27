@@ -48,6 +48,7 @@ def _environ_get_and_map(
 _AS_BOOL = lambda value: value.lower() == 'true'
 _AS_INT = lambda value: int(value)
 _AS_LIST = lambda value: list(filter(None, value.split(' ')))
+_AS_DICT = lambda value: dict(item.split('=', 1) for item in value.split(' ') if '=' in item)
 
 _BASE_DIR = dirname(dirname(abspath(__file__)))
 
@@ -324,23 +325,42 @@ REMOTE_AUTH_SUPERUSERS = _environ_get_and_map('REMOTE_AUTH_SUPERUSERS', '', _AS_
 REMOTE_AUTH_STAFF_GROUPS = _environ_get_and_map('REMOTE_AUTH_STAFF_GROUPS', '', _AS_LIST)
 REMOTE_AUTH_STAFF_USERS = _environ_get_and_map('REMOTE_AUTH_STAFF_USERS', '', _AS_LIST)
 # SSO Configuration
-SOCIAL_AUTH_OKTA_OPENIDCONNECT_KEY = environ.get('SOCIAL_AUTH_OKTA_OPENIDCONNECT_KEY')
-SOCIAL_AUTH_OKTA_OPENIDCONNECT_SECRET = _read_secret(
-    'okta_openidconnect_secret', environ.get('SOCIAL_AUTH_OKTA_OPENIDCONNECT_SECRET', '')
-)
-SOCIAL_AUTH_OKTA_OPENIDCONNECT_API_URL = environ.get('SOCIAL_AUTH_OKTA_OPENIDCONNECT_API_URL')
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = environ.get('SOCIAL_AUTH_GOOGLE_OAUTH2_KEY')
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = _read_secret(
-    'google_oauth2_secret', environ.get('SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET', '')
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = _read_secret('google_oauth2_secret', '')
+SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = _environ_get_and_map(
+    'SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE', 'openid email profile', _AS_LIST
+)
+SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_VERIFIED_EMAIL = _environ_get_and_map(
+    'SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_VERIFIED_EMAIL', 'True', _AS_BOOL
+)
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_DOMAINS = _environ_get_and_map(
+    'SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_DOMAINS', '', _AS_LIST
+)
+SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_HOSTED_DOMAIN = _environ_get_and_map(
+    'SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_HOSTED_DOMAIN', 'False', _AS_BOOL
+)
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_HOSTED_DOMAINS = _environ_get_and_map(
+    'SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_HOSTED_DOMAINS', '', _AS_LIST
+)
+SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS = _environ_get_and_map(
+    'SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS', 'prompt=select_account', _AS_DICT
+)
+SOCIAL_AUTH_PIPELINE = (
+    'social_core.pipeline.social_auth.social_details',
+    'social_core.pipeline.social_auth.social_uid',
+    'social_core.pipeline.social_auth.auth_allowed',
+    'social_core.pipeline.social_auth.social_user',
+    'netbox_smartlock.sso_pipeline.validate_google_identity',
+    'netbox_smartlock.sso_pipeline.block_duplicate_google_email',
+    'social_core.pipeline.user.get_username',
+    'social_core.pipeline.user.create_user',
+    'social_core.pipeline.social_auth.associate_user',
+    'netbox_smartlock.sso_pipeline.audit_google_sso_success',
+    'netbox_smartlock.sso_pipeline.load_sanitized_google_extra_data',
+    'social_core.pipeline.user.user_details',
 )
 
-# OIDC Configuration
-SOCIAL_AUTH_OIDC_OIDC_ENDPOINT = environ.get('SOCIAL_AUTH_OIDC_OIDC_ENDPOINT')
-SOCIAL_AUTH_OIDC_KEY = environ.get('SOCIAL_AUTH_OIDC_KEY')
-SOCIAL_AUTH_OIDC_SECRET = _read_secret('oidc_secret', environ.get('SOCIAL_AUTH_OIDC_SECRET', ''))
-SOCIAL_AUTH_OIDC_SCOPE = _environ_get_and_map('SOCIAL_AUTH_OIDC_SCOPE', '', _AS_LIST)
 LOGOUT_REDIRECT_URL = environ.get('LOGOUT_REDIRECT_URL', '/')
-SOCIAL_AUTH_OIDC_JWT_ALGORITHMS = _environ_get_and_map('SOCIAL_AUTH_OIDC_JWT_ALGORITHMS', 'RS256', _AS_LIST)
 
 # This repository is used to check whether there is a new release of NetBox available. Set to None to disable the
 # version check or use the URL below to check for release in the official NetBox repository.
@@ -360,6 +380,13 @@ CSRF_TRUSTED_ORIGINS = _environ_get_and_map('CSRF_TRUSTED_ORIGINS', '', _AS_LIST
 
 # The name to use for the session cookie.
 SESSION_COOKIE_NAME = environ.get('SESSION_COOKIE_NAME', 'sessionid')
+SESSION_COOKIE_SECURE = _environ_get_and_map('SESSION_COOKIE_SECURE', 'False', _AS_BOOL)
+CSRF_COOKIE_SECURE = _environ_get_and_map('CSRF_COOKIE_SECURE', 'False', _AS_BOOL)
+SESSION_COOKIE_SAMESITE = environ.get('SESSION_COOKIE_SAMESITE', 'Lax')
+CSRF_COOKIE_SAMESITE = environ.get('CSRF_COOKIE_SAMESITE', 'Lax')
+
+if proxy_ssl_header := environ.get('SECURE_PROXY_SSL_HEADER', ''):
+    SECURE_PROXY_SSL_HEADER = tuple(proxy_ssl_header.split(',', 1))
 
 # If true, the `includeSubDomains` directive will be included in the HTTP Strict Transport Security (HSTS) header.
 # This directive instructs the browser to apply the HSTS policy to all subdomains of the current domain.

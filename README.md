@@ -141,161 +141,133 @@ NetBox mặc định chạy tại:
 http://localhost:8000
 ```
 
-## Keycloak SSO Local
+## Google SSO
 
-Repo co san overlay `netbox-docker/docker-compose.keycloak.yml` de chay Keycloak lam IAM hub cho moi truong dev.
-Mo hinh local la LDAP -> Keycloak -> OIDC -> NetBox. NetBox khong ket noi LDAP truc tiep.
+SSO được cấu hình trực tiếp theo tài liệu chính thức của NetBox cho Google OAuth2:
 
-Overlay nay import realm `netbox-dev`, client OIDC `netbox-dev`, role `dcim-admin`/`dcim-guest`, group Keycloak `Admin`/`Guest`, va claim scope `dcim_regions`/`dcim_sites` de map xuong NetBox.
-LDAP dev service seed user noi bo `ldap-admin`/`ldap-guest`, group LDAP `dcim-admin`/`dcim-guest`, va scope mau `region-1`/`site-1`. Day la nguon user noi bo chuan; NetBox khong dang nhap truc tiep LDAP va khong can user local trong Keycloak cho app.
+- Google: https://netboxlabs.com/docs/netbox/administration/authentication/google/
 
-Chay NetBox kem Keycloak:
-
-```powershell
-cd netbox-docker
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml up -d --build
-```
-
-Ap cau hinh LDAP federation, role/group mapper va sync LDAP vao Keycloak:
-
-```powershell
-cd netbox-docker
-powershell -ExecutionPolicy Bypass -File .\keycloak\configure-ldap-oidc.ps1
-```
-
-Bootstrap NetBox RBAC cho group `Admin`/`Guest` duoc sync tu Keycloak:
-
-```powershell
-cd netbox-docker
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_bootstrap_rbac
-```
-
-Keycloak Admin Console:
-
-```text
-http://keycloak.localtest.me:8080
-```
-
-Tai khoan dev mac dinh:
-
-```text
-admin / admin
-```
-
-User dang nhap NetBox mau di qua LDAP -> Keycloak -> OIDC:
-
-```text
-ldap-admin / admin
-ldap-guest / guest
-```
-
-NetBox:
-
-```text
-http://localhost:8000
-```
-
-Cau hinh OIDC duoc khai bao trong `netbox-docker/env/netbox.env.example`.
-Voi realm import mac dinh, client secret dev la:
-
-```text
-netbox-dev-secret
-```
-
-Neu tao lai client secret trong Keycloak, cap nhat bien nay trong `netbox-docker/env/netbox.env`:
-
-```env
-SOCIAL_AUTH_OIDC_SECRET=<client-secret-moi>
-```
-
-OAuth cua NetBox duoc cau hinh theo dung mau docs Google va Okta-style OIDC.
-Google la backend truc tiep cua NetBox, nen Google Cloud OAuth client phai co
-redirect URI:
+Google Cloud OAuth client phải có redirect URI:
 
 ```text
 http://localhost:8000/oauth/complete/google-oauth2/
-http://netbox.localtest.me:8000/oauth/complete/google-oauth2/
 ```
 
-Keycloak dong vai tro OIDC provider giong cach docs Okta tao OIDC app. Callback
-URL cua NetBox trong Keycloak phai gom:
+Google không cho dùng IP thô cho OAuth redirect, trừ `127.0.0.1`. Khi dev local, dùng `localhost`; khi production, dùng domain HTTPS thật.
 
-```text
-http://localhost:8000/oauth/complete/oidc/
-http://netbox.localtest.me:8000/oauth/complete/oidc/
-http://localhost:8000/oauth/disconnect/oidc/
-http://netbox.localtest.me:8000/oauth/disconnect/oidc/
-```
-
-Hai backend nay cung hien tren man `/login/` mac dinh cua NetBox:
+Cấu hình trong `netbox-docker/env/netbox.env`:
 
 ```env
-REMOTE_AUTH_BACKEND=social_core.backends.google.GoogleOAuth2 social_core.backends.open_id_connect.OpenIdConnectAuth
+REMOTE_AUTH_ENABLED=True
+REMOTE_AUTH_AUTO_CREATE_USER=True
+REMOTE_AUTH_BACKEND=social_core.backends.google.GoogleOAuth2
+REMOTE_AUTH_DEFAULT_GROUPS=Guest
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY=<google-client-id>
+SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE=openid email profile
+SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_VERIFIED_EMAIL=True
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_DOMAINS=
+SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_HOSTED_DOMAIN=False
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_HOSTED_DOMAINS=
+SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS=prompt=select_account
+CSRF_TRUSTED_ORIGINS=http://localhost:8000
+LOGOUT_REDIRECT_URL=http://localhost:8000/login/
 ```
 
-Google direct login khong co claim Keycloak `groups`, `dcim_regions`,
-`dcim_sites`; pipeline sync group/scope chi chay cho backend `oidc`.
+Scope `openid email profile` kích hoạt OpenID Connect trên Google OAuth2 và cho phép NetBox nhận thông tin định danh cơ bản của user.
+Nếu dùng Google Workspace, cấu hình thêm domain:
 
-De kiem tra NetBox container doc duoc discovery endpoint cua Keycloak:
+```env
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_DOMAINS=company.com
+SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_HOSTED_DOMAIN=True
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_HOSTED_DOMAINS=company.com
+SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS=prompt=select_account hd=company.com
+```
+
+`hd=company.com` chỉ là hint trên màn Google; pipeline vẫn kiểm tra claim `email_verified`, domain email và `hd` ở backend.
+
+OAuth client secret không được đặt trong `.env` thật. Đặt secret vào các file local đã bị Git ignore:
+
+```text
+netbox-docker/secrets/google_oauth2_secret.txt
+```
+
+Container sẽ mount file này thành Docker secret:
+
+```text
+/run/secrets/google_oauth2_secret
+```
+
+Google sẽ hiển thị trên màn `/login/` mặc định của NetBox. NetBox tạo hoặc liên kết user local sau khi đăng nhập SSO; user SSO mới được đưa vào group `Guest` mặc định. Quyền `Admin` phải được cấp thủ công trong NetBox bằng group và ObjectPermission.
+
+Policy production:
+
+- Chỉ cho phép email Google corporate đã xác minh đăng nhập NetBox.
+- Không bật tự đồng bộ group từ Google nếu chưa có yêu cầu nghiệp vụ rõ; NetBox vẫn là nơi quản lý quyền bằng `Admin`, `Guest` và ObjectPermission.
+- Luôn giữ local admin break-glass: không tắt login local của NetBox và luôn có ít nhất một superuser local để đăng nhập khi Google lỗi.
+
+Bootstrap group/quyền SmartLock:
 
 ```powershell
 cd netbox-docker
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox curl http://keycloak.localtest.me:8080/realms/netbox-dev/.well-known/openid-configuration
+docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_bootstrap_rbac
 ```
 
-Kiem tra end-to-end LDAP -> Keycloak -> OIDC -> NetBox API cho `ldap-admin` va `ldap-guest`:
+Audit SSO và link thủ công local user với Google khi thật sự cần:
 
 ```powershell
-python netbox-docker\keycloak\verify_ldap_oidc_flow.py
+cd netbox-docker
+docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_sso_audit
+docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_sso_link --username admin --confirm-username admin --provider google-oauth2 --uid <google-sub-claim>
 ```
 
-Luu y phan quyen: plugin SmartLock dang dung group NetBox ten `Admin` cho cac thao tac quan tri phieu va danh muc tai san/Smart Lock; group `Guest` cho nguoi dung khach/doi tac.
-Keycloak la noi map role/group. NetBox chi doc JWT OIDC claim `groups`/`roles` qua pipeline `netbox_smartlock.auth_pipeline.sync_keycloak_groups` va tu dong dong bo cac group trong allow-list:
+Chỉ dùng `smartlock_sso_link` sau khi admin đã xác minh chắc chắn Google `sub` thuộc đúng người dùng local. Command không tự link theo email để tránh nâng quyền sai vào tài khoản admin.
 
-```env
-KEYCLOAK_GROUP_SYNC_ENABLED=True
-KEYCLOAK_GROUP_SYNC_GROUPS=Admin Guest
-KEYCLOAK_GROUP_SYNC_REMOVE=True
-KEYCLOAK_GROUP_SYNC_GROUP_MAP=dcim-admin=Admin dcim-guest=Guest
-KEYCLOAK_GROUP_SYNC_ROLE_MAP=dcim-admin=Admin dcim-guest=Guest
-KEYCLOAK_SCOPE_SYNC_ENABLED=True
-KEYCLOAK_SCOPE_SYNC_REGION_CLAIM=dcim_regions
-KEYCLOAK_SCOPE_SYNC_SITE_CLAIM=dcim_sites
-```
+Troubleshooting SSO:
 
-Pipeline chi quan ly cac group nam trong `KEYCLOAK_GROUP_SYNC_GROUPS`; cac group NetBox local khac duoc giu nguyen. Neu token/userinfo khong co claim `groups` hoac `roles`, pipeline bo qua sync de tranh xoa nham quyen.
+- `Single sign-on failed`: xem log `docker compose logs netbox | Select-String "Google SSO login rejected"`.
+- `duplicate_email_without_social_association`: email Google trùng local user nhưng chưa có social link. Dùng tài khoản Google khác, đổi email local user, hoặc link thủ công bằng `smartlock_sso_link`.
+- `email_not_verified`: Google chưa xác minh email. Dùng account đã verified.
+- `email_domain_rejected`: email không thuộc `SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_DOMAINS`.
+- `hosted_domain_missing`: đang bật Workspace mode nhưng Google không trả claim `hd`.
+- `hosted_domain_rejected`: claim `hd` không thuộc `SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_HOSTED_DOMAINS`.
+- Token Google không được lưu trong `social_django_usersocialauth.extra_data`; pipeline chỉ giữ metadata không nhạy cảm cần thiết.
 
-Region/Site scope duoc quan ly tu Keycloak bang claim:
+Sau khi bootstrap:
 
-```json
-{
-  "dcim_regions": ["region-1"],
-  "dcim_sites": ["site-1"]
-}
-```
-
-Khi user login OIDC hoac goi plugin API bang Keycloak JWT, pipeline tao/cap nhat ObjectPermission rieng cho user voi prefix `SmartLock Keycloak Scope`. NetBox van enforce quyen bang `.restrict(user, "view")`, nen UI/API chi thay Region/Site/Location/Rack/Device va object SmartLock nam trong scope claim. Neu claim scope bi thieu, pipeline giu nguyen permission hien co de tranh tu khoa do mapper loi; neu claim co nhung rong, permission scope cu bi xoa.
-
-Plugin API SmartLock nhan Bearer JWT tu Keycloak tren cac endpoint `/api/plugins/smartlock/...`; token phai co issuer realm `netbox-dev` va client `netbox-dev`.
-
-Khi `KEYCLOAK_SCOPE_SYNC_ENABLED=True`, command `smartlock_bootstrap_rbac` chi tao RBAC group nen va khong cap quyen DCIM rong cho `Admin`/`Guest`; quyen Region/Site den tu Keycloak claim. Khi tat scope sync, command quay ve cach cu va cap scope mac dinh trong NetBox.
+- group `Admin` có quyền quản trị AssetGroup, Asset, SmartLock và workflow phiếu yêu cầu;
+- group `Guest` chỉ quản lý phiếu/person do chính user đó tạo;
+- Region/Site/Location/Rack scope do ObjectPermission của NetBox quản lý;
+- nếu cần giới hạn theo site/region cho từng khách hàng, thêm constraint trực tiếp vào ObjectPermission trong NetBox.
 
 Production hardening:
 
-- Dung domain HTTPS thong nhat, vi du `https://netbox.example.com` va `https://sso.example.com`; cap nhat `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, callback URL Keycloak, `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT`, va `LOGOUT_REDIRECT_URL`.
-- Bat `SECURE_SSL_REDIRECT=True`, `SECURE_HSTS_SECONDS=31536000`, `SECURE_HSTS_INCLUDE_SUBDOMAINS=True`; chi bat `SECURE_HSTS_PRELOAD=True` khi domain san sang preload.
-- Doi tat ca secret dev: `SECRET_KEY`, `API_TOKEN_PEPPER_1`, database/Redis password, `SOCIAL_AUTH_OIDC_SECRET`, Keycloak admin password, LDAP bind password. Uu tien Docker/Kubernetes secrets thay vi commit vao `.env`.
-- Dung LDAPS tu Keycloak den LDAP: `KEYCLOAK_LDAP_CONNECTION_URL=ldaps://ldap.example.com:636` va `KEYCLOAK_LDAP_USE_TRUSTSTORE_SPI=always`.
-- Giu man `/login/` mac dinh cua NetBox khi lam theo docs OAuth chinh thuc. Nut OAuth provider hien canh form local login; khong dung `break_glass=1`.
+- Dùng HTTPS public domain, ví dụ `https://netbox.example.com`.
+- Cập nhật `ALLOWED_HOSTS`, `CORS_ORIGIN_WHITELIST`, `CSRF_TRUSTED_ORIGINS` và Google redirect URI theo domain thật.
+- Bật `SECURE_SSL_REDIRECT=True`, `SECURE_HSTS_SECONDS=31536000`, `SECURE_HSTS_INCLUDE_SUBDOMAINS=True`; chỉ bật `SECURE_HSTS_PRELOAD=True` khi domain đã sẵn sàng preload.
+- Đổi toàn bộ secret dev: `SECRET_KEY`, `API_TOKEN_PEPPER_1`, database/Redis password và Google client secret.
+- Ưu tiên Docker/Kubernetes secrets thay vì commit secret vào `.env`.
 
-Neu database dev da tung dang nhap OIDC truoc khi cau hinh on dinh, co the co user trung email. Kiem tra association OIDC:
+Kiểm tra nhanh cấu hình SSO trước khi chạy:
 
 ```powershell
 cd netbox-docker
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell -c "from social_django.models import UserSocialAuth; print(list(UserSocialAuth.objects.values_list('provider','uid','user__username','user__email')))"
+python check-sso-preflight.py
 ```
 
-Group se duoc sync vao user dang duoc association OIDC tro den, khong nhat thiet la user local cung email tao thu cong tu truoc.
+Kiểm tra production:
+
+```powershell
+cd netbox-docker
+python check-sso-preflight.py --production --base-url https://netbox.example.com
+```
+
+Checklist Google Console:
+
+- Chọn OAuth app type `Internal` nếu dùng Google Workspace.
+- Authorized redirect URI dev: `http://localhost:8000/oauth/complete/google-oauth2/`.
+- Authorized redirect URI production: `https://netbox.example.com/oauth/complete/google-oauth2/`.
+- Không dùng raw IP cho redirect URI, trừ `127.0.0.1` khi dev.
+- Production chỉ dùng HTTPS domain thật.
 
 ## Migration
 

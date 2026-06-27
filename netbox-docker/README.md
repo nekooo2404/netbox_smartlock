@@ -50,144 +50,155 @@ The whole application will be available after a few minutes.
 Open the URL `http://0.0.0.0:8000/` in a web-browser.
 You should see the NetBox homepage.
 
-## Local Keycloak SSO
+## Google SSO
 
-This repository includes `docker-compose.keycloak.yml` for local Keycloak SSO.
-The local architecture is LDAP -> Keycloak -> OIDC -> NetBox. NetBox does not connect to LDAP directly.
+This repository uses the official NetBox Google OAuth2 authentication flow.
+No extra identity overlay is included.
 
-It imports realm `netbox-dev`, client `netbox-dev`, roles `dcim-admin`/`dcim-guest`,
-Keycloak groups `Admin`/`Guest`, OIDC claims `dcim_regions`/`dcim_sites`, and starts
-an internal LDAP service with demo users `ldap-admin` and `ldap-guest`. LDAP is the
-identity source for internal app users; NetBox does not connect to LDAP directly.
+Official NetBox references:
 
-Run NetBox with Keycloak:
+- Google: https://netboxlabs.com/docs/netbox/administration/authentication/google/
 
-```powershell
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml up -d --build
-```
-
-Apply LDAP federation, role/group mappers, and trigger LDAP sync:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\keycloak\configure-ldap-oidc.ps1
-```
-
-The configure script is idempotent. It also updates the OIDC client secret,
-redirect URIs, web origins, post-logout redirect URIs, LDAP connection, LDAP
-attribute mappers, and OIDC claims from environment variables.
-
-Bootstrap NetBox RBAC for the synced `Admin`/`Guest` groups:
-
-```powershell
-docker compose -f docker-compose.yml -f docker-compose.override.yml -f docker-compose.keycloak.yml exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_bootstrap_rbac
-```
-
-OpenID discovery:
-
-```text
-http://keycloak.localtest.me:8080/realms/netbox-dev/.well-known/openid-configuration
-```
-
-NetBox OAuth providers follow the NetBox Google and Okta-style documentation.
-Google is configured as a direct NetBox OAuth2 backend:
+Google OAuth2 callback URIs:
 
 ```text
 http://localhost:8000/oauth/complete/google-oauth2/
-http://netbox.localtest.me:8000/oauth/complete/google-oauth2/
 ```
 
-Keycloak is configured like an Okta-style OIDC provider, using NetBox's generic
-OIDC backend. Add these redirect/sign-out URIs to the Keycloak client:
+Google OAuth does not allow raw IP redirect URIs except `127.0.0.1`.
+Use `localhost` for development and a real HTTPS domain for production.
 
-```text
-http://localhost:8000/oauth/complete/oidc/
-http://netbox.localtest.me:8000/oauth/complete/oidc/
-http://localhost:8000/oauth/disconnect/oidc/
-http://netbox.localtest.me:8000/oauth/disconnect/oidc/
-```
-
-The relevant NetBox environment variables are:
+Relevant NetBox environment variables:
 
 ```env
 REMOTE_AUTH_ENABLED=True
 REMOTE_AUTH_AUTO_CREATE_USER=True
-REMOTE_AUTH_BACKEND=social_core.backends.google.GoogleOAuth2 social_core.backends.open_id_connect.OpenIdConnectAuth
+REMOTE_AUTH_BACKEND=social_core.backends.google.GoogleOAuth2
+REMOTE_AUTH_DEFAULT_GROUPS=Guest
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY=<google-client-id>
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET=<google-client-secret>
-SOCIAL_AUTH_OIDC_KEY=netbox-dev
-SOCIAL_AUTH_OIDC_SECRET=<keycloak-client-secret>
-SOCIAL_AUTH_OIDC_OIDC_ENDPOINT=http://keycloak.localtest.me:8080/realms/netbox-dev
+SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE=openid email profile
+SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_VERIFIED_EMAIL=True
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_DOMAINS=
+SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_HOSTED_DOMAIN=False
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_HOSTED_DOMAINS=
+SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS=prompt=select_account
 ```
 
-Both providers appear on the normal NetBox `/login/` page. Google direct login
-does not carry Keycloak Region/Site claims; the custom Keycloak group/scope sync
-only runs for the `oidc` backend.
-
-End-to-end verification from the repository root:
-
-```powershell
-python netbox-docker\keycloak\verify_ldap_oidc_flow.py
-```
-
-Credentials:
-
-```text
-Keycloak admin: admin / admin
-LDAP admin SSO user: ldap-admin / admin
-LDAP guest SSO user: ldap-guest / guest
-```
-
-The imported Keycloak client exposes `groups` and `roles` OIDC claims. NetBox runs the custom
-`netbox_smartlock.auth_pipeline.sync_keycloak_groups` social-auth pipeline step and
-syncs allow-listed Keycloak groups/roles into NetBox groups on each login:
+The `openid email profile` scope enables OpenID Connect on Google OAuth2 and lets NetBox receive the user's basic identity claims.
+For Google Workspace, set the allowed domains and hosted-domain enforcement:
 
 ```env
-KEYCLOAK_GROUP_SYNC_ENABLED=True
-KEYCLOAK_GROUP_SYNC_GROUPS=Admin Guest
-KEYCLOAK_GROUP_SYNC_REMOVE=True
-KEYCLOAK_GROUP_SYNC_GROUP_MAP=dcim-admin=Admin dcim-guest=Guest
-KEYCLOAK_GROUP_SYNC_ROLE_MAP=dcim-admin=Admin dcim-guest=Guest
-KEYCLOAK_SCOPE_SYNC_ENABLED=True
-KEYCLOAK_SCOPE_SYNC_REGION_CLAIM=dcim_regions
-KEYCLOAK_SCOPE_SYNC_SITE_CLAIM=dcim_sites
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_DOMAINS=company.com
+SOCIAL_AUTH_GOOGLE_OAUTH2_REQUIRE_HOSTED_DOMAIN=True
+SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_HOSTED_DOMAINS=company.com
+SOCIAL_AUTH_GOOGLE_OAUTH2_AUTH_EXTRA_ARGUMENTS=prompt=select_account hd=company.com
 ```
 
-Only the allow-listed groups are managed by the pipeline. Existing local NetBox
-groups outside that list are left untouched.
+The `hd=company.com` argument is only a Google UI hint. The backend pipeline still validates `email_verified`, the email domain, and the `hd` claim.
 
-The SmartLock plugin API accepts Keycloak Bearer JWTs on `/api/plugins/smartlock/...`.
-Tokens must be issued by realm `netbox-dev` for client `netbox-dev`.
+Do not store OAuth client secrets in `env/netbox.env`. Put them in local
+Docker secret files instead:
 
-Region/Site scope is managed by Keycloak attributes/claims:
-
-```json
-{
-  "dcim_regions": ["region-1"],
-  "dcim_sites": ["site-1"]
-}
+```text
+secrets/google_oauth2_secret.txt
 ```
 
-On each OIDC login or plugin API JWT request, the pipeline creates user-specific
-NetBox ObjectPermissions with prefix `SmartLock Keycloak Scope`. NetBox still
-enforces all UI/API scope through ObjectPermission constraints; Keycloak is the
-source for the Region/Site values. When `KEYCLOAK_SCOPE_SYNC_ENABLED=True`,
-`smartlock_bootstrap_rbac` does not grant broad DCIM Region/Site permissions to
-the `Admin`/`Guest` groups.
+It is mounted into the container as:
+
+```text
+/run/secrets/google_oauth2_secret
+```
+
+Google appears on the normal NetBox `/login/` page.
+NetBox creates or links the local user after SSO login. New SSO users are added
+to `Guest` by default; grant `Admin` manually in NetBox when required.
+
+Production policy:
+
+- Require one verified corporate Google email per person.
+- Keep group and permission management in NetBox with `Admin`, `Guest`, and
+  ObjectPermission. Do not add custom provider group sync until the business
+  requirement is explicit.
+- Keep local NetBox login enabled and keep at least one local superuser as a
+  break-glass account.
+
+Bootstrap SmartLock RBAC:
+
+```powershell
+docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_bootstrap_rbac
+```
+
+Audit SSO users and manually link a verified Google identity only when needed:
+
+```powershell
+docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_sso_audit
+docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py smartlock_sso_link --username admin --confirm-username admin --provider google-oauth2 --uid <google-sub-claim>
+```
+
+Use `smartlock_sso_link` only after an administrator has verified that the Google
+`sub` claim belongs to the intended local NetBox user. The command does not link
+by email automatically because that can accidentally grant local admin access.
+
+SSO troubleshooting:
+
+- `Single sign-on failed`: inspect `docker compose logs netbox` for
+  `Google SSO login rejected reason=...`.
+- `duplicate_email_without_social_association`: Google email matches a local
+  NetBox user, but no social-auth link exists yet. Use a different Google
+  account, change the local user's email, or link manually with
+  `smartlock_sso_link`.
+- `email_not_verified`: Google did not mark the email as verified.
+- `email_domain_rejected`: email is outside
+  `SOCIAL_AUTH_GOOGLE_OAUTH2_ALLOWED_DOMAINS`.
+- `hosted_domain_missing`: Workspace mode is enabled but Google did not return
+  the `hd` claim.
+- `hosted_domain_rejected`: Google returned an `hd` claim outside the allowed
+  hosted domains.
+- Google OAuth tokens are not stored in `social_django_usersocialauth.extra_data`;
+  the pipeline keeps only non-sensitive metadata.
+
+After bootstrap:
+
+- `Admin` manages AssetGroup, Asset, SmartLock, and access-request workflow.
+- `Guest` manages only their own requests and request persons.
+- Region/Site/Location/Rack visibility is controlled by NetBox ObjectPermission.
 
 Production hardening:
 
-- Use HTTPS public domains for NetBox and Keycloak, and update `ALLOWED_HOSTS`,
-  `CSRF_TRUSTED_ORIGINS`, Keycloak redirect URIs, `SOCIAL_AUTH_OIDC_OIDC_ENDPOINT`,
+- Use HTTPS public domains for NetBox and Google.
+- Update `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, Google redirect URIs,
   and `LOGOUT_REDIRECT_URL`.
 - Enable `SECURE_SSL_REDIRECT=True` and HSTS after TLS is in place.
 - Replace all dev secrets and use Docker/Kubernetes secrets for `SECRET_KEY`,
-  database/Redis passwords, OIDC client secret, Keycloak admin password, and LDAP
-  bind password.
-- Use LDAPS for LDAP federation, for example
-  `KEYCLOAK_LDAP_CONNECTION_URL=ldaps://ldap.example.com:636`.
+  database/Redis passwords, and Google client secret.
 - Keep NetBox's normal `/login/` page enabled when following the official
   NetBox OAuth examples. OAuth provider buttons are rendered beside the local
   login form.
+
+Run the local SSO preflight before starting NetBox:
+
+```bash
+python check-sso-preflight.py
+```
+
+Run the production preflight before deployment:
+
+```bash
+python check-sso-preflight.py --production --base-url https://netbox.example.com
+```
+
+Google Console checklist:
+
+- Use OAuth app type `Internal` for Google Workspace.
+- Development redirect URI: `http://localhost:8000/oauth/complete/google-oauth2/`.
+- Production redirect URI: `https://netbox.example.com/oauth/complete/google-oauth2/`.
+- Do not use raw IP redirect URIs except `127.0.0.1` for development.
+- Production must use a real HTTPS domain.
+
+Dependency note: the image still installs `social-auth-core[all]` from the
+upstream NetBox requirements to preserve NetBox Docker compatibility. Reduce
+that extra only after a clean image rebuild and Google login smoke test. Do not
+remove `[all]` while validating unrelated SSO fixes.
 
 To create the first admin user run this command:
 

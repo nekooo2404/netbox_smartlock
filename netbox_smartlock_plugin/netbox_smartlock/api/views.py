@@ -2,7 +2,6 @@ from netbox.api.viewsets import NetBoxModelViewSet
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -29,7 +28,6 @@ from ..permissions import (
     restrict_access_request_persons_for_user,
     restrict_access_requests_for_user,
 )
-from .authentication import KeycloakOIDCAuthentication
 from .errors import raise_serializer_validation_error
 from .serializers import (
     AccessRequestPersonSerializer,
@@ -38,13 +36,6 @@ from .serializers import (
     AssetSerializer,
     SmartLockSerializer,
 )
-
-
-class SmartLockAuthenticationMixin:
-    authentication_classes = (
-        KeycloakOIDCAuthentication,
-        SessionAuthentication,
-    )
 
 
 class AdminCrudGuardMixin:
@@ -117,7 +108,6 @@ class AccessRequestAdminActionMixin:
 
 
 class AccessRequestViewSet(
-    SmartLockAuthenticationMixin,
     AdminCrudGuardMixin,
     AccessRequestAdminActionMixin,
     NetBoxModelViewSet,
@@ -167,7 +157,6 @@ class AccessRequestViewSet(
 
 
 class AccessRequestPersonViewSet(
-    SmartLockAuthenticationMixin,
     AdminCrudGuardMixin,
     AccessRequestAdminActionMixin,
     NetBoxModelViewSet,
@@ -210,13 +199,13 @@ class AccessRequestPersonViewSet(
         return self.run_workflow_action(self.get_object(), "mark_out")
 
 
-class AssetGroupViewSet(SmartLockAuthenticationMixin, NetBoxModelViewSet):
+class AssetGroupViewSet(NetBoxModelViewSet):
     queryset = AssetGroup.objects.prefetch_related("tags")
     serializer_class = AssetGroupSerializer
     filterset_class = AssetGroupFilterSet
 
 
-class AssetViewSet(SmartLockAuthenticationMixin, NetBoxModelViewSet):
+class AssetViewSet(NetBoxModelViewSet):
     queryset = Asset.objects.select_related(
         "asset_group", "region", "site", "location",
     ).prefetch_related("tags")
@@ -224,7 +213,7 @@ class AssetViewSet(SmartLockAuthenticationMixin, NetBoxModelViewSet):
     filterset_class = DeviceAssetFilterSet
 
 
-class SmartLockViewSet(SmartLockAuthenticationMixin, NetBoxModelViewSet):
+class SmartLockViewSet(NetBoxModelViewSet):
     queryset = SmartLock.objects.select_related(
         "asset_group", "region", "site", "location", "rack"
     ).prefetch_related("tags")
